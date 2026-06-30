@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OS Técnicas — CANAÃ Telecom</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#080E1A;--bg2:#0D1625;--bg3:#111E30;--border:rgba(55,138,221,0.15);--accent:#378ADD;--ok:#2ECC71;--warn:#F39C12;--crit:#FF6259;--dead:#95A5A6;--text:#E8EEF6;--muted:#7D93AB;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(55,138,221,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(55,138,221,0.04) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+  header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:rgba(8,14,26,0.95);backdrop-filter:blur(10px)}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  .logo-title{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.12em;color:var(--accent)}
+  .logo-sub{font-size:11px;color:var(--muted);letter-spacing:0.06em;margin-top:1px}
+  nav{display:flex;gap:4px}
+  .nav-btn{padding:6px 14px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all 0.2s}
+  .nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .nav-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(55,138,221,0.1)}
+  main{position:relative;z-index:1;padding:20px 28px;max-width:1600px;margin:0 auto}
+  /* Filtros */
+  .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;margin-bottom:16px}
+  .filter-group{display:flex;flex-direction:column;gap:4px}
+  .filter-label{font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase}
+  select,input[type=date],input[type=text]{background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 10px;outline:none;transition:border-color 0.2s}
+  select:focus,input:focus{border-color:var(--accent)}
+  input[type=text]{width:200px}
+  .btn{padding:7px 16px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;border:1px solid var(--accent);color:var(--accent);background:transparent;transition:all 0.2s;align-self:flex-end;white-space:nowrap}
+  .btn:hover{background:rgba(55,138,221,0.1)}
+  .btn.loading{opacity:0.5;pointer-events:none}
+  .btn-export{border-color:var(--ok);color:var(--ok)}
+  .btn-export:hover{background:rgba(46,204,113,0.1)}
+  .btn-export:disabled{opacity:0.3;pointer-events:none}
+  .result-count{font-family:var(--mono);font-size:11px;color:var(--muted);align-self:flex-end;margin-left:auto;white-space:nowrap}
+  /* Gráficos */
+  .charts-row{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:16px}
+  .chart-section{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:14px}
+  .chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .chart-title{font-size:11px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase}
+  .chart-hint-label{font-size:9px;color:var(--muted);font-family:var(--mono);letter-spacing:0.06em}
+  .chart-area{height:120px;position:relative}
+  .chart-filter-hint{display:none;margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--ok);letter-spacing:0.06em;cursor:pointer}
+  .chart-filter-hint:hover{text-decoration:underline}
+  /* Tabela */
+  .table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:6px;overflow:hidden;display:flex;flex-direction:column}
+  .table-scroll{overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(100vh - 430px)}
+  .table-scroll::-webkit-scrollbar{height:6px;width:6px}
+  .table-scroll::-webkit-scrollbar-track{background:var(--bg3)}
+  .table-scroll::-webkit-scrollbar-thumb{background:rgba(55,138,221,0.35);border-radius:3px}
+  .table-scroll::-webkit-scrollbar-thumb:hover{background:rgba(55,138,221,0.6)}
+  table{width:100%;border-collapse:collapse;min-width:1100px}
+  thead th{position:sticky;top:0;z-index:2;background:var(--bg3)}
+  thead{border-bottom:1px solid var(--border)}
+  th{padding:9px 12px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
+  th:hover{color:var(--accent)}
+  td{padding:8px 12px;border-bottom:1px solid rgba(55,138,221,0.06);font-size:12px;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(55,138,221,0.04)}
+  .mono{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .signal-ok{color:var(--ok);font-family:var(--mono);font-size:12px;font-weight:700}
+  .signal-warn{color:var(--warn);font-family:var(--mono);font-size:12px;font-weight:700}
+  .signal-crit{color:var(--crit);font-family:var(--mono);font-size:12px;font-weight:700}
+  .signal-dead{color:var(--dead);font-family:var(--mono);font-size:12px}
+  .status-F{color:var(--muted);font-size:11px}
+  .status-A{color:var(--warn);font-size:11px}
+  .status-AS{color:var(--ok);font-size:11px}
+  .badge-pop{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;background:rgba(55,138,221,0.1);border:1px solid var(--border);color:var(--accent)}
+  .badge-pop.selected{background:rgba(46,204,113,0.15);border-color:rgba(46,204,113,0.4);color:var(--ok)}
+  /* Loading */
+  .loading-overlay{position:fixed;inset:0;background:rgba(8,14,26,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px}
+  .loading-overlay.hidden{display:none}
+  .spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-text{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.1em}
+  .empty{text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:12px}
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(4,8,18,0.82);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.25s}
+  .modal-overlay.open{opacity:1;pointer-events:all}
+  .modal{background:var(--bg2);border:1px solid rgba(55,138,221,0.35);border-radius:8px;width:min(1000px,95vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,0.7);transform:translateY(14px) scale(0.99);transition:transform 0.25s,opacity 0.25s}
+  .modal-overlay.open .modal{transform:translateY(0) scale(1)}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .modal-title{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.1em;color:var(--accent)}
+  .modal-subtitle{font-size:12px;color:var(--muted);margin-top:2px}
+  .modal-close{width:28px;height:28px;border-radius:4px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+  .modal-close:hover{border-color:var(--crit);color:var(--crit)}
+  .modal-body{overflow:auto;flex:1;padding:0}
+  .modal-body::-webkit-scrollbar{width:5px;height:5px}
+  .modal-body::-webkit-scrollbar-track{background:var(--bg3)}
+  .modal-body::-webkit-scrollbar-thumb{background:rgba(55,138,221,0.3);border-radius:3px}
+  .modal-footer{padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
+  .modal-footer-info{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .modal table{min-width:760px}
+  .modal thead th{background:var(--bg3);position:sticky;top:0;z-index:2}
+  /* Tooltip sinal */
+  .sinal-tip{position:relative;cursor:help}
+  .sinal-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid rgba(55,138,221,0.25);color:var(--text);font-family:var(--mono);font-size:10px;padding:5px 9px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.15s;z-index:99;line-height:1.5}
+  .sinal-tip:hover::after{opacity:1}
+  /* Skeleton */
+  @keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
+  .skel{background:linear-gradient(90deg,var(--bg3) 25%,rgba(55,138,221,0.07) 50%,var(--bg3) 75%);background-size:600px 100%;animation:shimmer 1.4s infinite;border-radius:3px;height:11px;display:inline-block}
+  /* Btn sinal */
+  .btn-sinal{padding:2px 8px;background:transparent;border:1px solid rgba(46,204,113,0.3);border-radius:3px;color:var(--ok);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.2s;white-space:nowrap}
+  .btn-sinal:hover{background:rgba(46,204,113,0.1);border-color:var(--ok)}
+  .btn-refresh-modal{padding:5px 12px;background:transparent;border:1px solid rgba(55,138,221,0.35);border-radius:4px;color:var(--accent);font-family:var(--mono);font-size:10px;letter-spacing:.06em;cursor:pointer;transition:all 0.2s;white-space:nowrap}
+  .btn-refresh-modal:hover{background:rgba(55,138,221,0.1);border-color:var(--accent)}
+  .btn-refresh-modal:disabled{opacity:.4;pointer-events:none}
+  /* Paginação */
+  .pagination{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:10px 14px;border-top:1px solid var(--border);background:var(--bg3)}
+  .page-btn{padding:4px 9px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.2s}
+  .page-btn:hover,.page-btn.active{border-color:var(--accent);color:var(--accent)}
+  .page-btn:disabled{opacity:0.3;pointer-events:none}
+  .page-info{font-family:var(--mono);font-size:10px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay hidden" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">CONSULTANDO IXC...</div>
+</div>
+
+<header>
+  <div class="logo" style="gap:10px;align-items:center">
+    <img src="/static/logo.png" alt="CANAÃ Telecom" style="height:36px;width:auto;object-fit:contain">
+    <div>
+      <div class="logo-title">ACOMPANHAMENTO DE O.S</div>
+      <div class="logo-sub">MANUTENÇÃO E VISTORIA TECNICA</div>
+    </div>
+  </div>
+  <nav>
+    <a href="/historico" class="nav-btn">HISTÓRICO</a>
+    <a href="/" class="nav-btn">SINAL</a>
+    <a href="/os" class="nav-btn active">OS</a>
+    <a href="/kpis" class="nav-btn">KPIs</a>
+    <a href="/mapa" class="nav-btn">MAPA</a>
+  </nav>
+</header>
+
+<main>
+  <div class="filters">
+    <div class="filter-group">
+      <span class="filter-label">Data início</span>
+      <input type="date" id="dtIni">
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Data fim</span>
+      <input type="date" id="dtFim">
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">POP</span>
+      <select id="filtPop"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Assunto</span>
+      <select id="filtAssunto"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Status OS</span>
+      <select id="filtStatus">
+        <option value="">Todos</option>
+        <option value="A">Aberto</option>
+        <option value="AS">Em Atendimento</option>
+        <option value="F">Fechado</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Busca (nome)</span>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="filtBusca" placeholder="Nome do cliente..."
+               onkeydown="if(event.key==='Enter')buscar();if(event.key==='Escape'){this.value='';aplicarFiltros();}">
+        <button onclick="document.getElementById('filtBusca').value='';aplicarFiltros()"
+                title="Limpar" style="padding:0 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;font-size:13px;transition:all 0.2s"
+                onmouseover="this.style.borderColor='var(--crit)';this.style.color='var(--crit)'"
+                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">✕</button>
+      </div>
+    </div>
+    <button class="btn" id="btnBuscar" onclick="buscar()">BUSCAR</button>
+    <button class="btn btn-export" id="btnExport" onclick="exportarExcel()" disabled>↓ EXPORTAR EXCEL</button>
+    <span class="result-count" id="resultCount">--</span>
+  </div>
+
+  <!-- Aviso limite 2000 -->
+  <div id="limiteBanner" style="display:none;margin-bottom:12px;padding:10px 16px;background:rgba(243,156,18,0.08);border:1px solid rgba(243,156,18,0.35);border-radius:5px;display:none;align-items:center;gap:10px">
+    <span style="color:#F39C12;font-size:14px">⚠</span>
+    <span style="font-size:12px;color:#F39C12;font-family:var(--mono)">LIMITE DE 2.000 REGISTROS ATINGIDO</span>
+    <span style="font-size:12px;color:var(--muted)">— Refine os filtros (período menor, POP ou Assunto específico) para ver todos os dados.</span>
+  </div>
+
+  <div class="charts-row">
+    <div class="chart-section">
+      <div class="chart-header">
+        <div class="chart-title">Distribuição de OS por POP</div>
+        <span class="chart-hint-label">CLIQUE NA BARRA PARA FILTRAR</span>
+      </div>
+      <div class="chart-area">
+        <canvas id="chartPop"></canvas>
+      </div>
+      <div class="chart-filter-hint" id="chartHint" onclick="limparSelecaoChart()"></div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-header">
+        <div class="chart-title">Status OS</div>
+      </div>
+      <div class="chart-area">
+        <canvas id="chartStatus"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID Atd</th>
+            <th>ID Cliente</th>
+            <th>Assunto</th>
+            <th>Abertura</th>
+            <th>Fechamento</th>
+            <th>Nome / Razão Social</th>
+            <th>POP</th>
+            <th>Bairro</th>
+            <th>Endereço</th>
+            <th>ONU Tipo</th>
+            <th>Sinal RX (IXC)</th>
+            <th>Sinal TX</th>
+            <th>Status OS</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="13" class="empty">Use os filtros acima e clique em Buscar.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let dados=[], filtrados=[], pagina=1;
+const POR_PAGINA=100;
+let chart=null, chartStatus=null, popSelecionado=null;
+
+// Datas padrão: primeiro dia do mês atual até hoje
+(function(){
+  const hoje = new Date();
+  const fim  = hoje.toISOString().split('T')[0];
+  const ini  = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+  document.getElementById('dtIni').value = ini;
+  document.getElementById('dtFim').value = fim;
+})();
+
+async function init(){
+  const [rPops,rAss]=await Promise.all([
+    fetch('/api/os/pops').then(r=>r.json()),
+    fetch('/api/os/assuntos').then(r=>r.json())
+  ]);
+  const selPop=document.getElementById('filtPop');
+  rPops.dados.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;selPop.appendChild(o);});
+  const selAss=document.getElementById('filtAssunto');
+  rAss.dados.forEach(a=>{const o=document.createElement('option');o.value=a.id;o.textContent=a.assunto;selAss.appendChild(o);});
+}
+
+async function buscar(){
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+  document.getElementById('btnBuscar').classList.add('loading');
+  try{
+    const dtIni=document.getElementById('dtIni').value;
+    const dtFim=document.getElementById('dtFim').value;
+    const pop=document.getElementById('filtPop').value;
+    const assunto=document.getElementById('filtAssunto').value;
+    const data=await(await fetch(`/api/os?dt_ini=${dtIni}&dt_fim=${dtFim}&pop=${encodeURIComponent(pop)}&assunto=${assunto}`)).json();
+    if(data.status!=='ok') throw new Error(data.mensagem);
+    dados=data.dados;
+    popSelecionado=null;
+    aplicarFiltros();
+    renderChart();
+    renderChartStatus();
+    document.getElementById('resultCount').textContent=data.total.toLocaleString('pt-BR')+' registros';
+    document.getElementById('btnExport').disabled=false;
+    // Aviso limite
+    const banner=document.getElementById('limiteBanner');
+    if(data.total>=2000){banner.style.display='flex';}
+    else{banner.style.display='none';}
+  }catch(e){alert('Erro: '+e.message);}
+  finally{
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    document.getElementById('btnBuscar').classList.remove('loading');
+  }
+}
+
+function aplicarFiltros(){
+  const busca=document.getElementById('filtBusca').value.toLowerCase().trim();
+  const status=document.getElementById('filtStatus').value;
+  let base=dados;
+  if(popSelecionado){
+    base=dados.filter(d=>(d.pop||'Sem POP')===popSelecionado);
+  }
+  filtrados=base.filter(d=>{
+    if(status&&d.status!==status) return false;
+    if(busca&&!d.nome?.toLowerCase().includes(busca)) return false;
+    return true;
+  });
+  pagina=1;
+  renderizar();
+  document.getElementById('resultCount').textContent=filtrados.length.toLocaleString('pt-BR')+' registros';
+}
+document.getElementById('filtStatus').addEventListener('change',aplicarFiltros);
+
+function nivelSinal(rx){
+  if(!rx||rx==='--') return{cls:'signal-dead',label:'--'};
+  const v=parseFloat(rx);
+  if(isNaN(v)) return{cls:'signal-dead',label:'--'};
+  if(v>=-24) return{cls:'signal-ok',  label:v.toFixed(2)+' dBm'};
+  if(v>=-26) return{cls:'signal-warn', label:v.toFixed(2)+' dBm ▲'};
+  if(v>=-28) return{cls:'signal-crit', label:v.toFixed(2)+' dBm ▼'};
+  return           {cls:'signal-dead', label:v.toFixed(2)+' dBm ✕'};
+}
+
+function statusLabel(s){
+  const map={'F':'Fechado','A':'Aberto','AS':'Em atend.'};
+  return`<span class="status-${s}">${map[s]||s}</span>`;
+}
+
+function renderizar(){
+  const inicio=(pagina-1)*POR_PAGINA;
+  const pag=filtrados.slice(inicio,inicio+POR_PAGINA);
+  const tbody=document.getElementById('tbody');
+  if(!pag.length){
+    tbody.innerHTML=`<tr><td colspan="13" class="empty">Nenhum registro encontrado.</td></tr>`;
+    document.getElementById('pagination').innerHTML='';
+    return;
+  }
+  const popSel=popSelecionado;
+  tbody.innerHTML=pag.map(d=>{
+    const sinal=nivelSinal(d.sinal_rx);
+    const tx=d.sinal_tx?parseFloat(d.sinal_tx).toFixed(2)+' dBm':'--';
+    const popClass=popSel&&(d.pop||'Sem POP')===popSel?'badge-pop selected':'badge-pop';
+    return`<tr>
+      <td><span class="mono">${d.id_atd}</span></td>
+      <td><span class="mono">${d.id_cliente}</span></td>
+      <td>${d.assunto||'--'}</td>
+      <td><span class="mono">${d.data_abertura||'--'}</span></td>
+      <td><span class="mono">${d.data_fechamento||'--'}</span></td>
+      <td>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${d.nome||'--'}
+          <button class="btn-sinal" onclick="verSinal(${d.id_cliente},${JSON.stringify(d.nome||'').replace(/"/g,'&quot;')})" title="Ver sinal em tempo real">📶 Ver Sinal</button>
+        </span>
+      </td>
+      <td>${d.pop?`<span class="${popClass}">${d.pop}</span>`:'--'}</td>
+      <td>${d.bairro||'--'}</td>
+      <td>${d.endereco||'--'}</td>
+      <td><span class="mono">${d.onu_tipo||'--'}</span></td>
+      <td><span class="${sinal.cls}">${sinal.label}</span></td>
+      <td><span class="mono">${tx}</span></td>
+      <td>${statusLabel(d.status)}</td>
+    </tr>`;
+  }).join('');
+  renderPaginacao();
+}
+
+function renderPaginacao(){
+  const total=Math.ceil(filtrados.length/POR_PAGINA);
+  if(total<=1){document.getElementById('pagination').innerHTML='';return;}
+  let h=`<span class="page-info">${pagina}/${total}</span>`;
+  h+=`<button class="page-btn" onclick="irPag(1)" ${pagina===1?'disabled':''}>«</button>`;
+  h+=`<button class="page-btn" onclick="irPag(${pagina-1})" ${pagina===1?'disabled':''}>‹</button>`;
+  for(let i=Math.max(1,pagina-2);i<=Math.min(total,pagina+2);i++)
+    h+=`<button class="page-btn ${i===pagina?'active':''}" onclick="irPag(${i})">${i}</button>`;
+  h+=`<button class="page-btn" onclick="irPag(${pagina+1})" ${pagina===total?'disabled':''}>›</button>`;
+  h+=`<button class="page-btn" onclick="irPag(${total})" ${pagina===total?'disabled':''}>»</button>`;
+  document.getElementById('pagination').innerHTML=h;
+}
+function irPag(p){pagina=p;renderizar();document.querySelector('.table-scroll').scrollTop=0;}
+
+/* ── Gráfico interativo ─────────────────────────────── */
+const COR_NORMAL  ='rgba(55,138,221,0.65)';
+const COR_BORDA_N ='rgba(55,138,221,1)';
+const COR_SEL     ='rgba(46,204,113,0.75)';
+const COR_BORDA_S ='#2ECC71';
+const COR_DIM     ='rgba(55,138,221,0.15)';
+const COR_BORDA_D ='rgba(55,138,221,0.3)';
+
+function renderChart(){
+  const contPop={};
+  dados.forEach(d=>{const p=d.pop||'Sem POP';contPop[p]=(contPop[p]||0)+1;});
+  const labels=Object.keys(contPop).sort((a,b)=>contPop[b]-contPop[a]);
+  const values=labels.map(l=>contPop[l]);
+  const ctx=document.getElementById('chartPop').getContext('2d');
+  if(chart) chart.destroy();
+  popSelecionado=null;
+  document.getElementById('chartHint').style.display='none';
+
+  chart=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'OS', data:values,
+        backgroundColor:labels.map(()=>COR_NORMAL),
+        borderColor:labels.map(()=>COR_BORDA_N),
+        borderWidth:1, borderRadius:3,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            title:items=>items[0].label,
+            label:items=>[` ${items.raw.toLocaleString('pt-BR')} OS`,` clique para filtrar`]
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#6B7F96',font:{size:10}},grid:{color:'rgba(55,138,221,0.08)'}},
+        y:{ticks:{color:'#6B7F96',font:{size:10}},grid:{color:'rgba(55,138,221,0.08)'}}
+      },
+      onClick(evt){
+        const pts=chart.getElementsAtEventForMode(evt,'nearest',{intersect:true},false);
+        if(!pts.length){
+          if(popSelecionado) limparSelecaoChart();
+          return;
+        }
+        const idx=pts[0].index;
+        const pop=chart.data.labels[idx];
+        if(popSelecionado===pop){
+          limparSelecaoChart();
+        } else {
+          selecionarPop(idx, pop);
+        }
+      }
+    }
+  });
+  document.getElementById('chartPop').style.cursor='pointer';
+}
+
+function selecionarPop(idx, pop){
+  popSelecionado=pop;
+  const ds=chart.data.datasets[0];
+  ds.backgroundColor=chart.data.labels.map((_,i)=>i===idx?COR_SEL:COR_DIM);
+  ds.borderColor    =chart.data.labels.map((_,i)=>i===idx?COR_BORDA_S:COR_BORDA_D);
+  chart.update();
+  aplicarFiltros();
+  const hint=document.getElementById('chartHint');
+  hint.textContent=`● Filtrando: ${pop}  —  ${filtrados.length.toLocaleString('pt-BR')} OS  ·  clique aqui ou na barra para limpar`;
+  hint.style.display='block';
+  document.getElementById('resultCount').textContent=filtrados.length.toLocaleString('pt-BR')+' registros';
+}
+
+function renderChartStatus(){
+  const cont={A:0,AS:0,F:0};
+  dados.forEach(d=>{if(d.status in cont) cont[d.status]++;});
+  const ctx2=document.getElementById('chartStatus').getContext('2d');
+  if(chartStatus) chartStatus.destroy();
+  chartStatus=new Chart(ctx2,{
+    type:'doughnut',
+    data:{
+      labels:['Aberto','Em Atendimento','Fechado'],
+      datasets:[{
+        data:[cont.A,cont.AS,cont.F],
+        backgroundColor:['rgba(255,98,89,0.7)','rgba(243,156,18,0.7)','rgba(46,204,113,0.7)'],
+        borderColor:['#FF6259','#F39C12','#2ECC71'],
+        borderWidth:1,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      cutout:'60%',
+      plugins:{
+        legend:{
+          display:true,
+          position:'right',
+          labels:{color:'#7D93AB',font:{size:10},boxWidth:10,padding:8}
+        },
+        tooltip:{
+          callbacks:{
+            label:i=>' '+i.raw.toLocaleString('pt-BR')+' OS'
+          }
+        }
+      }
+    }
+  });
+}
+
+function limparSelecaoChart(){
+  popSelecionado=null;
+  if(chart){
+    const ds=chart.data.datasets[0];
+    ds.backgroundColor=chart.data.labels.map(()=>COR_NORMAL);
+    ds.borderColor    =chart.data.labels.map(()=>COR_BORDA_N);
+    chart.update();
+  }
+  document.getElementById('chartHint').style.display='none';
+  aplicarFiltros();
+  document.getElementById('resultCount').textContent=filtrados.length.toLocaleString('pt-BR')+' registros';
+}
+
+function exportarExcel(){
+  if(!filtrados.length) return;
+  const linhas=filtrados.map(d=>({
+    'ID Atd':d.id_atd,'ID Cliente':d.id_cliente,'Assunto':d.assunto,
+    'Abertura':d.data_abertura,'Fechamento':d.data_fechamento,
+    'Nome / Razão Social':d.nome,'POP':d.pop,'Bairro':d.bairro,'Endereço':d.endereco,
+    'ONU Tipo':d.onu_tipo,
+    'Sinal RX (dBm)':d.sinal_rx?parseFloat(d.sinal_rx):'',
+    'Sinal TX (dBm)':d.sinal_tx?parseFloat(d.sinal_tx):'',
+    'Status OS':d.status,
+  }));
+  const ws=XLSX.utils.json_to_sheet(linhas);
+  ws['!cols']=[{wch:8},{wch:10},{wch:28},{wch:36},{wch:18},{wch:28},{wch:36},{wch:12},{wch:14},{wch:14},{wch:10},{wch:18},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'OS Técnicas');
+  XLSX.writeFile(wb,`OS_Tecnicas_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+
+// ── Modal Sinal ──────────────────────────────────────────────
+const TIP_RX = '● Normal ≥ -24 dBm\n● Atenção -24 a -26 dBm\n● Crítico -26 a -28 dBm\n● Fora < -28 dBm';
+const TIP_TX = 'Sinal de saída da ONU (uplink)\nReferência: -4 a +2 dBm (ZTE GPON)';
+
+let _modalClienteId = null, _modalNome = '';
+
+function nivelModalLabel(n){
+  return {'Normal':'NORMAL','Atencao':'ATENÇÃO','Critico':'CRÍTICO','Fora de Operacao':'FORA OP.','Sem leitura':'SEM LEITURA'}[n]||n||'--';
+}
+function nivelModalClass(n){
+  return {'Normal':'signal-ok','Atencao':'signal-warn','Critico':'signal-crit'}[n]||'signal-dead';
+}
+function fmtRxModal(v, tipText){
+  if(v===null||v===undefined) return `<span class="signal-dead sinal-tip" data-tip="${tipText}">--</span>`;
+  const n=parseFloat(v);
+  let cls='signal-dead';
+  if(n>=-24) cls='signal-ok'; else if(n>=-26) cls='signal-warn'; else if(n>=-28) cls='signal-crit';
+  return `<span class="${cls} sinal-tip" data-tip="${tipText}">${n.toFixed(2)} dBm</span>`;
+}
+
+function renderSkeleton(){
+  const cols = 10;
+  return Array(3).fill(0).map(()=>`<tr>${Array(cols).fill(0).map((_, i)=>{
+    const w = [80,90,50,55,70,55,70,70,65,90][i]||70;
+    return `<td><span class="skel" style="width:${w}px"></span></td>`;
+  }).join('')}</tr>`).join('');
+}
+
+async function carregarSinal(live=false){
+  const btn = document.getElementById('btnRefreshModal');
+  if(btn) btn.disabled = true;
+  document.getElementById('modalTbody').innerHTML = renderSkeleton();
+  document.getElementById('modalFooter').textContent = live ? 'Consultando SmartOLT ao vivo...' : 'Carregando...';
+
+  const controller = new AbortController();
+  const timeout = setTimeout(()=>controller.abort(), 15000);
+
+  try{
+    const url = `/api/cliente_sinal/${_modalClienteId}${live?'?live=1':''}`;
+    const resp = await fetch(url, {signal: controller.signal});
+    clearTimeout(timeout);
+    const data = await resp.json();
+    if(data.status!=='ok') throw new Error(data.mensagem);
+    const onus = data.onus;
+
+    if(!onus.length){
+      document.getElementById('modalTbody').innerHTML =
+        `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;line-height:2">
+          Nenhuma ONU encontrada para este cliente.<br>
+          <span style="font-size:10px;opacity:0.6">MAC pode não estar cadastrado no IXC ou SmartOLT.</span>
+        </td></tr>`;
+    } else {
+      document.getElementById('modalTbody').innerHTML = onus.map(o=>{
+        const porta=[o.board,o.port,o.onu].filter(Boolean).join('/');
+        const stColor={Online:'var(--ok)',LOS:'#E67E22','Power fail':'#9B59B6'}[o.status]||'var(--crit)';
+        return `<tr>
+          <td><span class="mono">${o.sn||'--'}</span></td>
+          <td>${o.olt||'--'}</td>
+          <td><span class="mono">${porta||'--'}</span></td>
+          <td>${o.zone||'--'}</td>
+          <td><span class="mono">${o.tipo||'--'}</span></td>
+          <td><span style="font-size:11px;font-weight:600;color:${stColor}">${o.status||'--'}</span></td>
+          <td>${fmtRxModal(o.sinal_rx, TIP_RX)}</td>
+          <td>${fmtRxModal(o.sinal_tx, TIP_TX)}</td>
+          <td><span class="${nivelModalClass(o.nivel)}" style="font-size:11px;font-weight:700">${nivelModalLabel(o.nivel)}</span></td>
+          <td><span class="mono">${o.ultima_mudanca||'--'}</span></td>
+        </tr>`;
+      }).join('');
+    }
+    const ts = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('modalFooter').textContent =
+      onus.length + (onus.length===1?' ONU encontrada':' ONUs encontradas') +
+      (live ? ' · atualizado ao vivo ' : ' · cache SmartOLT ~5min · ') + ts;
+  } catch(e){
+    clearTimeout(timeout);
+    const msg = e.name==='AbortError'
+      ? 'Timeout: SmartOLT não respondeu em 15s. Tente novamente.'
+      : 'Erro: ' + e.message;
+    document.getElementById('modalTbody').innerHTML =
+      `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--crit);font-family:var(--mono);font-size:11px;line-height:2">
+        ⚠ ${msg}<br>
+        <span style="font-size:10px;opacity:0.6">Verifique a conectividade com a SmartOLT.</span>
+      </td></tr>`;
+    document.getElementById('modalFooter').textContent = 'Falha ao carregar';
+  } finally {
+    if(btn) btn.disabled = false;
+  }
+}
+
+function verSinal(clienteId, nome){
+  _modalClienteId = clienteId;
+  _modalNome = nome;
+  document.getElementById('modalTitle').textContent = 'SINAL — ' + (nome||'#'+clienteId).toUpperCase();
+  document.getElementById('modalSubtitle').textContent = 'ID Cliente: ' + clienteId + ' · SmartOLT tempo real';
+  document.getElementById('modalOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  carregarSinal(false);
+}
+
+function refreshModal(){
+  if(_modalClienteId) carregarSinal(true);
+}
+
+function fecharModal(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') fecharModal(); });
+
+init();
+</script>
+
+<!-- Modal Sinal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)fecharModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">SINAL — SMARTOLT</div>
+        <div class="modal-subtitle" id="modalSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Serial Number</th><th>OLT</th><th>Porta</th><th>Zona</th>
+            <th>Tipo ONU</th><th>Status</th><th>Sinal RX</th><th>Sinal TX</th>
+            <th>Nível</th><th>Última Mudança</th>
+          </tr>
+        </thead>
+        <tbody id="modalTbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <span class="modal-footer-info" id="modalFooter"></span>
+      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta à SmartOLT ignorando o cache">⟳ AO VIVO</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

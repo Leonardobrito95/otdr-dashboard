@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OTDR Preventivo — CANAÃ Telecom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#080E1A;--bg2:#0D1625;--bg3:#111E30;--border:rgba(55,138,221,0.15);
+    --accent:#378ADD;--ok:#2ECC71;--warn:#F39C12;--crit:#FF6259;--dead:#95A5A6;
+    --text:#E8EEF6;--muted:#7D93AB;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(55,138,221,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(55,138,221,0.04) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+  header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:rgba(8,14,26,0.95);backdrop-filter:blur(10px)}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(0.85)}}
+  .logo-title{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.12em;color:var(--accent)}
+  .logo-sub{font-size:11px;color:var(--muted);letter-spacing:0.08em;margin-top:1px}
+  .header-right{display:flex;align-items:center;gap:10px}
+  .timestamp{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .btn-refresh{display:flex;align-items:center;gap:6px;padding:7px 14px;background:transparent;border:1px solid var(--accent);border-radius:4px;color:var(--accent);font-family:var(--mono);font-size:11px;cursor:pointer;letter-spacing:0.08em;transition:all 0.2s}
+  .btn-refresh:hover{background:rgba(55,138,221,0.1)}
+  .btn-refresh.loading{opacity:0.5;pointer-events:none}
+  .btn-refresh svg{transition:transform 0.6s}
+  .btn-refresh.loading svg{animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  nav{display:flex;gap:4px}
+  .nav-btn{padding:6px 14px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all 0.2s}
+  .nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .nav-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(55,138,221,0.1)}
+  .cache-badge{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:3px;background:rgba(55,138,221,0.1);border:1px solid var(--border);color:var(--muted)}
+  .cache-badge.fresh{color:var(--ok);border-color:rgba(46,204,113,0.3);background:rgba(46,204,113,0.08)}
+  main{position:relative;z-index:1;padding:20px 28px;max-width:1700px;margin:0 auto}
+  /* KPIs */
+  .kpis{display:flex;gap:10px;margin-bottom:16px;align-items:stretch}
+  .kpi-group{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .kpi-group-label{font-size:9px;color:var(--muted);letter-spacing:0.14em;text-transform:uppercase;font-family:var(--mono);padding-left:2px;opacity:0.7}
+  .kpi-group-cards{display:flex;gap:10px;flex:1}
+  .kpi-group.g-conectividade .kpi-group-cards{border-right:1px solid var(--border);padding-right:14px}
+  .kpi-group.g-sinal .kpi-group-cards{padding-left:4px}
+  .kpi{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px 16px;transition:border-color 0.2s}
+  .kpi:hover{border-color:rgba(55,138,221,0.35)}
+  .kpi-label{font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px}
+  .kpi-value{font-family:var(--mono);font-size:24px;font-weight:700;line-height:1}
+  .kpi-value.ok{color:var(--ok)}.kpi-value.warn{color:var(--warn)}.kpi-value.crit{color:var(--crit)}.kpi-value.dead{color:var(--dead)}.kpi-value.white{color:var(--text)}
+  .kpi-bar{height:2px;margin-top:8px;border-radius:1px;background:var(--border);overflow:hidden}
+  .kpi-bar-fill{height:100%;border-radius:1px;transition:width 0.6s ease}
+  /* Toolbar */
+  .toolbar{display:flex;align-items:flex-end;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .filter-group{display:flex;flex-direction:column;gap:4px}
+  .filter-label{font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase}
+  select,input[type=text]{background:var(--bg2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 10px;outline:none;transition:border-color 0.2s;height:34px}
+  select:focus,input:focus{border-color:var(--accent)}
+  input[type=text]{width:210px}
+  .filter-count{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto;padding-bottom:8px;white-space:nowrap}
+  /* Legenda */
+  .legend{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:0 14px;height:34px;flex-shrink:0}
+  .legend-label{font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-right:4px}
+  .legend-sep{width:1px;height:16px;background:var(--border);margin:0 4px}
+  .legend-item{display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .legend-dot.ok{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+  .legend-dot.warn{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+  .legend-dot.crit{background:var(--crit);box-shadow:0 0 6px var(--crit)}
+  .legend-dot.dead{background:var(--dead)}
+  .legend-text{font-family:var(--mono);font-size:11px;color:#A8B8CC}
+  .legend-text strong{color:#E8EEF6;font-weight:700}
+  /* Tabela com scroll */
+  .table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:6px;overflow:hidden;display:flex;flex-direction:column}
+  .table-scroll{overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(100vh - 310px)}
+  .table-scroll::-webkit-scrollbar{height:6px;width:6px}
+  .table-scroll::-webkit-scrollbar-track{background:var(--bg3)}
+  .table-scroll::-webkit-scrollbar-thumb{background:rgba(55,138,221,0.35);border-radius:3px}
+  .table-scroll::-webkit-scrollbar-thumb:hover{background:rgba(55,138,221,0.6)}
+  table{width:100%;border-collapse:collapse;min-width:1100px}
+  thead th{position:sticky;top:0;z-index:2;background:var(--bg3)}thead{border-bottom:1px solid var(--border)}
+  th{padding:10px 12px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
+  th:hover{color:var(--accent)}
+  th.sorted{color:var(--accent)}
+  td{padding:8px 12px;border-bottom:1px solid rgba(55,138,221,0.06);font-size:12px;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(55,138,221,0.04)}
+  .sn{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .olt-name{font-size:12px;font-weight:500}
+  .port-info{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  /* Nome cliente */
+  .nome-cliente{font-size:12px;font-weight:500;color:var(--text);max-width:180px;overflow:hidden;text-overflow:ellipsis}
+  .nome-id{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:1px}
+  /* Sinal */
+  .signal-cell{display:flex;flex-direction:column;gap:2px}
+  .signal-val{font-family:var(--mono);font-size:12px;font-weight:700}
+  .signal-val.ok{color:var(--ok)}.signal-val.warn{color:var(--warn)}.signal-val.crit{color:var(--crit)}.signal-val.dead{color:var(--dead)}
+  .signal-bar-wrap{width:64px;height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden}
+  .signal-bar-fill{height:100%;border-radius:2px;transition:width 0.3s}
+  /* Badges nível */
+  .nivel-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase}
+  .nivel-Normal{background:rgba(46,204,113,0.12);color:var(--ok);border:1px solid rgba(46,204,113,0.2)}
+  .nivel-Atencao{background:rgba(243,156,18,0.12);color:var(--warn);border:1px solid rgba(243,156,18,0.2)}
+  .nivel-Critico{background:rgba(231,76,60,0.12);color:var(--crit);border:1px solid rgba(231,76,60,0.2)}
+  .nivel-Fora{background:rgba(127,140,141,0.12);color:var(--dead);border:1px solid rgba(127,140,141,0.2)}
+  .nivel-Sem{background:rgba(55,138,221,0.08);color:var(--muted);border:1px solid var(--border)}
+  .status-online  {color:var(--ok);  font-size:11px}
+  .status-offline {color:var(--crit);font-size:11px}
+  .status-los     {color:#E67E22;    font-size:11px}
+  .status-pwrfail {color:#9B59B6;    font-size:11px}
+  /* Loading */
+  .loading-overlay{position:fixed;inset:0;background:rgba(8,14,26,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px}
+  .loading-overlay.hidden{display:none}
+  .spinner{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+  .loading-text{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.1em}
+  .empty{text-align:center;padding:48px;color:var(--muted);font-family:var(--mono);font-size:12px}
+  /* Paginação */
+  .pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border);background:var(--bg3)}
+  .page-btn{padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:11px;cursor:pointer;transition:all 0.2s}
+  .page-btn:hover,.page-btn.active{border-color:var(--accent);color:var(--accent)}
+  .page-btn:disabled{opacity:0.3;pointer-events:none}
+  .page-info{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  /* Export */
+  .btn-export{padding:7px 14px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;border:1px solid var(--ok);color:var(--ok);background:transparent;transition:all 0.2s;align-self:flex-end;white-space:nowrap}
+  .btn-export:hover{background:rgba(46,204,113,0.1)}
+  .btn-export:disabled{opacity:0.3;pointer-events:none}
+  /* Painel de alertas */
+  .alerta-strip{position:relative;z-index:5;padding:0 28px}
+  .alerta-bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:6px;margin:10px 0 4px;border:1px solid;cursor:pointer;transition:opacity 0.2s;font-size:12px;user-select:none}
+  .alerta-bar:hover{opacity:0.85}
+  .alerta-bar.ok{background:rgba(46,204,113,0.07);border-color:rgba(46,204,113,0.25);color:var(--ok)}
+  .alerta-bar.warn{background:rgba(255,98,89,0.08);border-color:rgba(255,98,89,0.35);color:var(--crit)}
+  .alerta-bar.loading{background:rgba(55,138,221,0.05);border-color:var(--border);color:var(--muted)}
+  .alerta-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .alerta-dot.ok{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+  .alerta-dot.warn{background:var(--crit);box-shadow:0 0 6px var(--crit);animation:pulse 1.5s infinite}
+  .alerta-msg{flex:1;font-family:var(--mono);font-size:11px;letter-spacing:0.04em}
+  .alerta-ts{font-family:var(--mono);font-size:10px;opacity:0.6}
+  .alerta-chevron{font-size:10px;opacity:0.6;transition:transform 0.2s}
+  .alerta-chevron.open{transform:rotate(180deg)}
+  .alerta-detail{display:none;background:var(--bg3);border:1px solid rgba(255,98,89,0.2);border-top:none;border-radius:0 0 6px 6px;padding:10px 14px;margin-top:-6px;overflow:hidden}
+  .alerta-detail.open{display:block}
+  .alerta-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(55,138,221,0.07);font-size:11px}
+  .alerta-row:last-child{border-bottom:none}
+  .alerta-olt{font-weight:600;min-width:160px;color:var(--text)}
+  .alerta-porta{font-family:var(--mono);font-size:10px;color:var(--muted);min-width:70px}
+  .alerta-causa{flex:1;color:var(--crit)}
+  .alerta-onus{font-family:var(--mono);font-size:10px;color:var(--warn)}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">CONSULTANDO SMARTOLT...</div>
+</div>
+
+<header>
+  <div class="logo" style="gap:10px;align-items:center">
+    <img src="/static/logo.png" alt="CANAÃ Telecom" style="height:36px;width:auto;object-fit:contain">
+    <div>
+      <div class="logo-title">OTDR</div>
+      <div class="logo-sub">MONITORAMENTO DE SINAL ÓPTICO</div>
+    </div>
+  </div>
+  <nav>
+    <a href="/historico" class="nav-btn">HISTÓRICO</a>
+    <a href="/" class="nav-btn active">SINAL</a>
+    <a href="/os" class="nav-btn">OS</a>
+    <a href="/kpis" class="nav-btn">KPIs</a>
+    <a href="/mapa" class="nav-btn">MAPA</a>
+  </nav>
+  <div class="header-right">
+    <span class="cache-badge" id="cacheBadge">--</span>
+    <span class="timestamp" id="timestamp">--</span>
+    <button class="btn-export" id="btnExport" onclick="exportarExcel()" disabled>↓ EXCEL</button>
+    <button class="btn-refresh" id="btnRefresh" onclick="forceRefresh()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M23 4v6h-6M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+      ATUALIZAR
+    </button>
+  </div>
+</header>
+
+<!-- Painel de alertas de outage -->
+<div class="alerta-strip">
+  <div class="alerta-bar loading" id="alertaBar" onclick="toggleAlertaDetail()">
+    <div class="alerta-dot" id="alertaDot"></div>
+    <span class="alerta-msg" id="alertaMsg">Verificando estado da rede...</span>
+    <span class="alerta-ts" id="alertaTs"></span>
+    <span class="alerta-chevron" id="alertaChevron">▼</span>
+  </div>
+  <div class="alerta-detail" id="alertaDetail"></div>
+</div>
+
+<main>
+  <div class="kpis">
+
+    <!-- Grupo 1: Conectividade -->
+    <div class="kpi-group g-conectividade">
+      <div class="kpi-group-label">Conectividade</div>
+      <div class="kpi-group-cards">
+        <div class="kpi"><div class="kpi-label">Total ONUs</div><div class="kpi-value white" id="kTotal">--</div><div id="kDesabSub" style="font-size:10px;color:var(--dead);margin-top:3px;font-family:var(--mono);letter-spacing:0.04em"></div><div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%;background:var(--accent)"></div></div></div>
+        <div class="kpi"><div class="kpi-label">Online</div><div class="kpi-value ok" id="kOnline">--</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bOnline" style="background:var(--ok)"></div></div></div>
+        <div class="kpi"><div class="kpi-label">Não Online</div><div class="kpi-value crit" id="kOffline" title="Offline + LOS + Power Fail">--</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bOffline" style="background:var(--crit)"></div></div></div>
+      </div>
+    </div>
+
+    <!-- Grupo 2: Qualidade de Sinal (subconjunto dos Online) -->
+    <div class="kpi-group g-sinal" style="flex:1">
+      <div class="kpi-group-label">Qualidade de Sinal — ONUs online</div>
+      <div class="kpi-group-cards">
+        <div class="kpi" style="flex:1"><div class="kpi-label">Normal</div><div class="kpi-value ok" id="kNormal">--</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bNormal" style="background:var(--ok)"></div></div></div>
+        <div class="kpi" style="flex:1"><div class="kpi-label">Atenção</div><div class="kpi-value warn" id="kAtencao">--</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bAtencao" style="background:var(--warn)"></div></div></div>
+        <div class="kpi" style="flex:1"><div class="kpi-label">Crítico</div><div class="kpi-value crit" id="kCritico">--</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bCritico" style="background:var(--crit)"></div></div></div>
+        <div class="kpi" style="flex:1"><div class="kpi-label">Fora Op.</div><div class="kpi-value dead" id="kFora">--</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bFora" style="background:var(--dead)"></div></div></div>
+        <div class="kpi" id="kpiSaudavel" style="flex:1;border-left:1px solid var(--border)" title="% ONUs online com sinal Normal (≥ -24 dBm)"><div class="kpi-label">Sinal Saudável</div><div class="kpi-value ok" id="kSaudavel">--%</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bSaudavel" style="background:var(--ok)"></div></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="toolbar">
+    <div class="filter-group">
+      <span class="filter-label">OLT</span>
+      <select id="filtOlt" onchange="aplicarFiltros()"><option value="">Todas</option></select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Nível</span>
+      <select id="filtNivel" onchange="aplicarFiltros()">
+        <option value="">Todos</option>
+        <option value="Normal">Normal</option>
+        <option value="Atencao">Atenção</option>
+        <option value="Critico">Crítico</option>
+        <option value="Fora de Operacao">Fora de Operação</option>
+        <option value="Sem leitura">Sem leitura</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Status</span>
+      <select id="filtStatus" onchange="aplicarFiltros()">
+        <option value="">Todos</option>
+        <option value="Online">Online</option>
+        <option value="Offline">Offline</option>
+        <option value="LOS">LOS</option>
+        <option value="Power fail">Power Fail</option>
+        <option value="falha_sync">⚠ Falha de Sync</option>
+        <option value="desabilitada">✕ Desabilitada</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Busca (SN / OLT / Zona / Tipo / Cliente)</span>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="filtBusca" placeholder="Ex: ZTEG12345, AGUAS CLARAS, JOÃO..."
+               onkeydown="if(event.key==='Enter')aplicarFiltros();if(event.key==='Escape'){this.value='';aplicarFiltros();}"
+               style="min-width:260px">
+        <button class="btn" onclick="aplicarFiltros()" style="align-self:stretch;padding:0 16px">🔍 BUSCAR</button>
+        <button onclick="document.getElementById('filtBusca').value='';aplicarFiltros()"
+                title="Limpar" style="padding:0 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;font-size:13px;transition:all 0.2s"
+                onmouseover="this.style.borderColor='var(--crit)';this.style.color='var(--crit)'"
+                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">✕</button>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="legend-label">Sinal RX</span>
+      <div class="legend-sep"></div>
+      <div class="legend-item"><div class="legend-dot ok"></div><span class="legend-text"><strong>Normal</strong> &ge;&minus;24 dBm</span></div>
+      <div class="legend-sep"></div>
+      <div class="legend-item"><div class="legend-dot warn"></div><span class="legend-text"><strong>Atenção</strong> &minus;24 a &minus;26</span></div>
+      <div class="legend-sep"></div>
+      <div class="legend-item"><div class="legend-dot crit"></div><span class="legend-text"><strong>Crítico</strong> &minus;26 a &minus;28</span></div>
+      <div class="legend-sep"></div>
+      <div class="legend-item"><div class="legend-dot dead"></div><span class="legend-text"><strong>Fora</strong> &lt;&minus;28 dBm</span></div>
+    </div>
+    <div class="filter-count" id="filterCount">-- registros</div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="ordenar('nome_cliente')">Cliente</th>
+            <th onclick="ordenar('sn')">Serial Number</th>
+            <th onclick="ordenar('olt')">OLT</th>
+            <th onclick="ordenar('port')">Porta</th>
+            <th onclick="ordenar('zone')">Zona</th>
+            <th onclick="ordenar('tipo')">Tipo ONU</th>
+            <th onclick="ordenar('status')">Status</th>
+            <th onclick="ordenar('sinal_rx')">Sinal RX</th>
+            <th onclick="ordenar('sinal_tx')">Sinal TX</th>
+            <th onclick="ordenar('nivel')">Nível</th>
+            <th onclick="ordenar('ultima_mudanca')">Última Mudança</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyOnus">
+          <tr><td colspan="11" class="empty">Carregando dados...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let todosOnus=[],filtrados=[],paginaAtual=1;
+const POR_PAGINA=100;
+let sortCol='nivel',sortDir=1;
+const NIVEL_ORD={'Fora de Operacao':0,'Critico':1,'Atencao':2,'Normal':3,'Sem leitura':4};
+const COLOR={'ok':'#2ECC71','warn':'#F39C12','crit':'#E74C3C','dead':'#7F8C8D'};
+
+function rxPct(rx){return rx===null?0:Math.max(0,Math.min(100,((rx+30)/15)*100))}
+
+function parseNome(o){
+  // Usa dados vindos do IXC via cruzamento MAC
+  return {id: o.cliente_id||'', nome: o.cliente_nome||''};
+}
+
+async function carregarDados(forcar=false){
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+  document.getElementById('btnRefresh').classList.add('loading');
+  try{
+    if(forcar) await fetch('/api/refresh');
+    const data=await(await fetch('/api/onus')).json();
+    if(data.status!=='ok') throw new Error(data.mensagem);
+    todosOnus=data.onus;
+    atualizarKPIs(data.resumo,data.atualizado,data.cache_age);
+    document.getElementById('timestamp').textContent=data.timestamp;
+    popularFiltroOlt();
+    aplicarFiltros();
+    document.getElementById('btnExport').disabled=false;
+  }catch(e){
+    document.getElementById('tbodyOnus').innerHTML=`<tr><td colspan="11" class="empty">Erro: ${e.message}</td></tr>`;
+  }finally{
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    document.getElementById('btnRefresh').classList.remove('loading');
+  }
+}
+
+function atualizarKPIs(r,atualizado,cacheAge){
+  const t=r.total||1;
+  document.getElementById('kTotal').textContent=r.total.toLocaleString('pt-BR');
+  if(r.desabilitadas){
+    document.getElementById('kDesabSub').textContent=(r.desabilitadas).toLocaleString('pt-BR')+' desabilitadas';
+  }
+  document.getElementById('kOnline').textContent=r.online.toLocaleString('pt-BR');
+  const offEl=document.getElementById('kOffline');
+  offEl.textContent=r.offline.toLocaleString('pt-BR');
+  // breakdown no title
+  const breakdown=[];
+  if(r.offline_puro) breakdown.push('Offline: '+r.offline_puro.toLocaleString('pt-BR'));
+  if(r.pwrfail)      breakdown.push('Power Fail: '+r.pwrfail.toLocaleString('pt-BR'));
+  if(r.los)          breakdown.push('LOS: '+r.los.toLocaleString('pt-BR'));
+  if(breakdown.length) offEl.title=breakdown.join(' | ');
+  document.getElementById('kNormal').textContent=r.normal.toLocaleString('pt-BR');
+  document.getElementById('kAtencao').textContent=r.atencao.toLocaleString('pt-BR');
+  document.getElementById('kCritico').textContent=r.critico.toLocaleString('pt-BR');
+  document.getElementById('kFora').textContent=r.fora.toLocaleString('pt-BR');
+  const pctSaude=r.online>0?r.normal/r.online*100:0;
+  const elS=document.getElementById('kSaudavel');
+  elS.textContent=pctSaude.toFixed(1)+'%';
+  elS.className='kpi-value '+(pctSaude>=60?'ok':pctSaude>=40?'warn':'crit');
+  document.getElementById('kpiSaudavel').title=r.normal.toLocaleString('pt-BR')+' ONUs Normal de '+r.online.toLocaleString('pt-BR')+' online';
+  document.getElementById('bOnline').style.width=(r.online/t*100)+'%';
+  document.getElementById('bOffline').style.width=(r.offline/t*100)+'%';
+  document.getElementById('bNormal').style.width=(r.normal/t*100)+'%';
+  document.getElementById('bAtencao').style.width=(r.atencao/t*100)+'%';
+  document.getElementById('bCritico').style.width=(r.critico/t*100)+'%';
+  document.getElementById('bFora').style.width=(r.fora/t*100)+'%';
+  document.getElementById('bSaudavel').style.width=pctSaude+'%';
+  document.getElementById('bSaudavel').style.background=pctSaude>=60?'var(--ok)':pctSaude>=40?'var(--warn)':'var(--crit)';
+  const badge=document.getElementById('cacheBadge');
+  if(atualizado){badge.textContent='AO VIVO';badge.className='cache-badge fresh';}
+  else{const m=Math.floor(cacheAge/60),s=cacheAge%60;badge.textContent=`CACHE ${m}m${s}s`;badge.className='cache-badge';}
+}
+
+function popularFiltroOlt(){
+  const olts=[...new Set(todosOnus.map(o=>o.olt))].sort();
+  const sel=document.getElementById('filtOlt'),val=sel.value;
+  sel.innerHTML='<option value="">Todas</option>'+olts.map(o=>`<option value="${o}">${o}</option>`).join('');
+  sel.value=val;
+}
+
+function aplicarFiltros(){
+  const olt=document.getElementById('filtOlt').value;
+  const nivel=document.getElementById('filtNivel').value;
+  const status=document.getElementById('filtStatus').value;
+  const busca=document.getElementById('filtBusca').value.toLowerCase().trim();
+  filtrados=todosOnus.filter(o=>{
+    if(olt&&o.olt!==olt) return false;
+    if(nivel&&o.nivel!==nivel) return false;
+    if(status==='falha_sync')  { if(!o.falha_sync)   return false; }
+    else if(status==='desabilitada') { if(!o.desabilitada) return false; }
+    else if(status&&o.status!==status) return false;
+    // Match exato por cliente_id (vindo do link OS→Sinal)
+    if(window._filtClienteId){
+      if(String(o.cliente_id)!==window._filtClienteId) return false;
+    } else if(busca){
+      const nc=parseNome(o);
+      const h=[o.sn,o.olt,o.zone,o.tipo,nc.nome,nc.id].map(v=>String(v??'').toLowerCase()).join(' ');
+      if(!h.includes(busca)) return false;
+    }
+    return true;
+  });
+  ordenarDados();paginaAtual=1;renderizar();
+  document.getElementById('filterCount').textContent=filtrados.length.toLocaleString('pt-BR')+' registros';
+}
+
+function ordenar(col){
+  if(sortCol===col) sortDir*=-1; else{sortCol=col;sortDir=1;}
+  document.querySelectorAll('th').forEach(t=>t.classList.remove('sorted'));
+  event.target.classList.add('sorted');
+  ordenarDados();renderizar();
+}
+
+function ordenarDados(){
+  filtrados.sort((a,b)=>{
+    let va=a[sortCol],vb=b[sortCol];
+    if(sortCol==='nivel'){va=NIVEL_ORD[va]??99;vb=NIVEL_ORD[vb]??99;return(va-vb)*sortDir;}
+    if(sortCol==='sinal_rx'||sortCol==='sinal_tx'){va=va??999;vb=vb??999;return(va-vb)*sortDir;}
+    if(sortCol==='nome_cliente'){va=parseNome(va).nome;vb=parseNome(vb).nome;}
+    va=(va||'').toString().toLowerCase();vb=(vb||'').toString().toLowerCase();
+    return va<vb?-sortDir:va>vb?sortDir:0;
+  });
+}
+
+function renderizar(){
+  const inicio=(paginaAtual-1)*POR_PAGINA,pagina=filtrados.slice(inicio,inicio+POR_PAGINA);
+  const tbody=document.getElementById('tbodyOnus');
+  if(!pagina.length){tbody.innerHTML='<tr><td colspan="11" class="empty">Nenhum registro encontrado.</td></tr>';document.getElementById('pagination').innerHTML='';return;}
+  tbody.innerHTML=pagina.map(o=>{
+    const rx=o.sinal_rx;
+    const rxClass=rx===null?'dead':rx>=-24?'ok':rx>=-26?'warn':rx>=-28?'crit':'dead';
+    const rxVal=rx!==null?rx.toFixed(2)+' dBm':'--';
+    const txVal=o.sinal_tx!==null?o.sinal_tx.toFixed(2)+' dBm':'--';
+    const pct=rxPct(rx);
+    const nivelKey=o.nivel==='Fora de Operacao'?'Fora':o.nivel==='Sem leitura'?'Sem':o.nivel;
+    const nivelLabel=o.nivel==='Fora de Operacao'?'Fora de Operação':o.nivel==='Sem leitura'?'Sem leitura':o.nivel==='Atencao'?'Atenção':o.nivel;
+    const sc=o.status==='Online'?'status-online':o.status==='LOS'?'status-los':o.status==='Power fail'?'status-pwrfail':'status-offline';
+    const sd=o.status==='Online'?'● ':o.status==='LOS'?'◈ ':o.status==='Power fail'?'⚡ ':'○ ';
+    const porta=`${o.board}/${o.port}/${o.onu}`;
+    const mud=o.ultima_mudanca?o.ultima_mudanca.replace('T',' ').slice(0,16):'--';
+    const nc=parseNome(o);
+    const nomeHtml=nc.nome
+      ? `<div class="nome-cliente">${nc.nome}</div>${nc.id?`<div class="nome-id">#${nc.id}</div>`:''}`
+      : `<span class="sn">--</span>`;
+    return`<tr>
+      <td>${nomeHtml}</td>
+      <td><span class="sn">${o.sn||'--'}</span></td>
+      <td><span class="olt-name">${o.olt||'--'}</span></td>
+      <td><span class="port-info">${porta}</span></td>
+      <td>${o.zone||'--'}</td>
+      <td><span class="sn">${o.tipo||'--'}</span></td>
+      <td><span class="${sc}">${sd}${o.status||'--'}</span></td>
+      <td><div class="signal-cell"><span class="signal-val ${rxClass}">${rxVal}</span><div class="signal-bar-wrap"><div class="signal-bar-fill" style="width:${pct}%;background:${COLOR[rxClass]}"></div></div></div></td>
+      <td><span class="signal-val">${txVal}</span></td>
+      <td><span class="nivel-badge nivel-${nivelKey}">${nivelLabel}</span></td>
+      <td><span class="sn">${mud}</span></td>
+    </tr>`;
+  }).join('');
+  renderPaginacao();
+}
+
+function renderPaginacao(){
+  const total=Math.ceil(filtrados.length/POR_PAGINA);
+  if(total<=1){document.getElementById('pagination').innerHTML='';return;}
+  let h=`<span class="page-info">${paginaAtual} / ${total}</span>`;
+  h+=`<button class="page-btn" onclick="irPagina(1)" ${paginaAtual===1?'disabled':''}>«</button>`;
+  h+=`<button class="page-btn" onclick="irPagina(${paginaAtual-1})" ${paginaAtual===1?'disabled':''}>‹</button>`;
+  for(let i=Math.max(1,paginaAtual-2);i<=Math.min(total,paginaAtual+2);i++)
+    h+=`<button class="page-btn ${i===paginaAtual?'active':''}" onclick="irPagina(${i})">${i}</button>`;
+  h+=`<button class="page-btn" onclick="irPagina(${paginaAtual+1})" ${paginaAtual===total?'disabled':''}>›</button>`;
+  h+=`<button class="page-btn" onclick="irPagina(${total})" ${paginaAtual===total?'disabled':''}>»</button>`;
+  document.getElementById('pagination').innerHTML=h;
+}
+
+function irPagina(p){paginaAtual=p;renderizar();window.scrollTo(0,0);}
+
+function exportarExcel(){
+  if(!filtrados.length) return;
+  const linhas=filtrados.map(o=>{
+    const nc=parseNome(o);
+    return{
+      'ID Cliente':   nc.id||'',
+      'Nome Cliente': nc.nome||'',
+      'Serial Number':o.sn,
+      'OLT':          o.olt,
+      'Porta':        `${o.board}/${o.port}/${o.onu}`,
+      'Zona':         o.zone,
+      'Tipo ONU':     o.tipo,
+      'Status':       o.status,
+      'Sinal RX (dBm)': o.sinal_rx,
+      'Sinal TX (dBm)': o.sinal_tx,
+      'Nível':        o.nivel,
+      'Última Mudança': o.ultima_mudanca?o.ultima_mudanca.replace('T',' ').slice(0,16):'',
+    };
+  });
+  const ws=XLSX.utils.json_to_sheet(linhas);
+  ws['!cols']=[{wch:10},{wch:36},{wch:18},{wch:18},{wch:10},{wch:14},{wch:12},{wch:8},{wch:14},{wch:14},{wch:16},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Sinal SmartOLT');
+  const hoje=new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb,`Sinal_SmartOLT_${hoje}.xlsx`);
+}
+
+async function forceRefresh(){await carregarDados(true);}
+
+// ── Painel de alertas ─────────────────────────────────────────
+let _alertaOpen = false;
+
+function toggleAlertaDetail(){
+  _alertaOpen = !_alertaOpen;
+  document.getElementById('alertaDetail').classList.toggle('open', _alertaOpen);
+  document.getElementById('alertaChevron').classList.toggle('open', _alertaOpen);
+}
+
+async function verificarAlertas(){
+  try{
+    const data = await fetch('/api/alertas/status').then(r=>r.json());
+    const bar  = document.getElementById('alertaBar');
+    const dot  = document.getElementById('alertaDot');
+    const msg  = document.getElementById('alertaMsg');
+    const ts   = document.getElementById('alertaTs');
+    const det  = document.getElementById('alertaDetail');
+
+    ts.textContent = 'Verificado às ' + (data.ts || '--');
+
+    if(!data.outages || data.outages.length === 0){
+      bar.className = 'alerta-bar ok';
+      dot.className = 'alerta-dot ok';
+      msg.textContent = '✓ Todos os OLTs operando normalmente';
+      det.innerHTML = '';
+      det.classList.remove('open');
+      document.getElementById('alertaChevron').style.display = 'none';
+    } else {
+      const n = data.outages.length;
+      bar.className = 'alerta-bar warn';
+      dot.className = 'alerta-dot warn';
+      msg.textContent = `⚠ ${n} porta${n>1?'s':''} em outage detectada${n>1?'s':''}`;
+      document.getElementById('alertaChevron').style.display = '';
+      det.innerHTML = data.outages.map(o=>`
+        <div class="alerta-row">
+          <span class="alerta-olt">${o.olt_nome}</span>
+          <span class="alerta-porta">Porta ${o.board}/${o.port}</span>
+          <span class="alerta-causa">${o.causa}</span>
+          <span class="alerta-onus">${o.onus||'?'} ONUs · ${o.los||0} LOS · ${o.pwrfail||0} PwrFail</span>
+        </div>`).join('');
+    }
+  } catch(e){
+    document.getElementById('alertaMsg').textContent = 'Erro ao verificar alertas';
+  }
+}
+
+verificarAlertas();
+setInterval(verificarAlertas, 5 * 60 * 1000); // a cada 5 min
+// Pré-filtro via URL param ?cliente_id= (match exato) ou ?busca= (texto livre)
+(function(){
+  const qs = new URLSearchParams(window.location.search);
+  const cid    = qs.get('cliente_id');
+  const busca  = qs.get('busca');
+  const status = qs.get('status');
+  if(cid){
+    window._filtClienteId = String(decodeURIComponent(cid));
+  } else if(busca){
+    document.getElementById('filtBusca').value = decodeURIComponent(busca);
+  }
+  if(status){
+    document.getElementById('filtStatus').value = decodeURIComponent(status);
+  }
+})();
+carregarDados();
+</script>
+</body>
+</html>

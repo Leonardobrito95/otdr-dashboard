@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Histórico — CANAÃ Telecom</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080E1A;--bg2:#0D1625;--bg3:#111E30;
+  --border:rgba(55,138,221,0.15);--accent:#378ADD;
+  --ok:#2ECC71;--warn:#F39C12;--crit:#FF6259;--dead:#95A5A6;
+  --text:#E8EEF6;--muted:#7D93AB;
+  --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(55,138,221,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(55,138,221,0.04) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Nav ── */
+.nav-btn{padding:6px 14px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all .2s}
+.nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+.nav-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(55,138,221,.1)}
+
+/* ── Main layout ── */
+main{position:relative;z-index:1;padding:20px 28px;max-width:1600px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+
+/* ── KPI row ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;position:relative;overflow:hidden;animation:fadeUp .4s ease both}
+.kpi-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px}
+.kpi-card.c-accent::after{background:var(--accent)}
+.kpi-card.c-warn::after{background:var(--warn)}
+.kpi-card.c-crit::after{background:var(--crit)}
+.kpi-card.c-dead::after{background:var(--dead)}
+.kpi-label{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);margin-bottom:8px}
+.kpi-val{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:6px}
+.kpi-card.c-accent .kpi-val{color:var(--accent)}
+.kpi-card.c-warn  .kpi-val{color:var(--warn)}
+.kpi-card.c-crit  .kpi-val{color:var(--crit)}
+.kpi-card.c-dead  .kpi-val{color:var(--dead)}
+
+/* ── Section ── */
+.section{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;animation:fadeUp .4s ease both}
+.sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sec-title{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;font-family:var(--mono)}
+.chart-wrap{height:180px;position:relative}
+
+/* ── Day cards row ── */
+.day-cards{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin-top:14px}
+.day-cards::-webkit-scrollbar{height:4px}
+.day-cards::-webkit-scrollbar-track{background:var(--bg3)}
+.day-cards::-webkit-scrollbar-thumb{background:rgba(55,138,221,.3);border-radius:2px}
+.day-card{flex-shrink:0;width:130px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:10px 12px;transition:border-color .2s}
+.day-card:hover{border-color:rgba(55,138,221,.4)}
+.day-date{font-family:var(--mono);font-size:9px;color:var(--accent);letter-spacing:.06em;margin-bottom:6px}
+.day-total{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--text);line-height:1}
+.day-rx{font-size:10px;color:var(--muted);margin-top:4px}
+.day-bar{height:3px;border-radius:2px;background:var(--border);overflow:hidden;display:flex;gap:1px;margin-top:8px}
+.bar-seg{height:100%}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:0}
+.tab-btn{padding:9px 18px;border-radius:4px 4px 0 0;font-family:var(--mono);font-size:10px;letter-spacing:.08em;cursor:pointer;border:1px solid transparent;border-bottom:none;color:var(--muted);background:transparent;transition:all .2s;white-space:nowrap}
+.tab-btn:hover{color:var(--accent)}
+.tab-btn.active{border-color:var(--border);color:var(--accent);background:var(--bg2);border-bottom-color:var(--bg2)}
+.tab-panels{background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;padding:16px 18px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* ── Tab toolbar ── */
+.tab-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.tab-desc{font-size:12px;color:var(--muted);flex:1;min-width:200px}
+.btn-export{padding:6px 14px;border-radius:4px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;cursor:pointer;border:1px solid var(--ok);color:var(--ok);background:transparent;transition:all .2s;white-space:nowrap}
+.btn-export:hover{background:rgba(46,204,113,.1)}
+.btn-export:disabled{opacity:.3;pointer-events:none}
+select.filter-sel,input.filter-inp{background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--sans);font-size:12px;padding:6px 10px;outline:none;transition:border-color .2s}
+select.filter-sel:focus,input.filter-inp:focus{border-color:var(--accent)}
+input.filter-inp{width:180px}
+
+/* ── Tables ── */
+.table-scroll{overflow:auto;max-height:380px;position:relative}
+.table-scroll::-webkit-scrollbar{height:5px;width:5px}
+.table-scroll::-webkit-scrollbar-track{background:var(--bg3)}
+.table-scroll::-webkit-scrollbar-thumb{background:rgba(55,138,221,.3);border-radius:3px}
+.table-scroll::-webkit-scrollbar-thumb:hover{background:rgba(55,138,221,.6)}
+table{width:100%;border-collapse:collapse;min-width:900px}
+thead th{position:sticky;top:0;z-index:2;background:var(--bg3);padding:9px 12px;text-align:left;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid rgba(55,138,221,.05);font-size:12px;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(55,138,221,.03)}
+.mono{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.empty{text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;line-height:1.8}
+
+/* ── Badges ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.b-atencao{background:rgba(243,156,18,.12);color:var(--warn);border:1px solid rgba(243,156,18,.2)}
+.b-critico{background:rgba(231,76,60,.12);color:var(--crit);border:1px solid rgba(231,76,60,.2)}
+.b-fora{background:rgba(127,140,141,.12);color:var(--dead);border:1px solid rgba(127,140,141,.2)}
+
+/* ── Sinal colors ── */
+.s-ok{color:var(--ok);font-family:var(--mono);font-size:11px;font-weight:700}
+.s-warn{color:var(--warn);font-family:var(--mono);font-size:11px;font-weight:700}
+.s-crit{color:var(--crit);font-family:var(--mono);font-size:11px;font-weight:700}
+.s-dead{color:var(--dead);font-family:var(--mono);font-size:11px}
+.delta{color:var(--crit);font-family:var(--mono);font-size:11px;font-weight:700}
+
+/* ── Dias badge ── */
+.dias-1{color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:700}
+.dias-2{color:var(--warn);font-family:var(--mono);font-size:11px;font-weight:700}
+.dias-4{color:var(--crit);font-family:var(--mono);font-size:11px;font-weight:700}
+
+/* ── Loading ── */
+.loading-overlay{position:fixed;inset:0;background:rgba(8,14,26,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px}
+.loading-overlay.hidden{display:none}
+.spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.loading-text{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em}
+
+/* ── Piora: barra inline de variação ───────────────── */
+.var-bar-wrap{display:flex;align-items:center;gap:6px;min-width:140px}
+.var-bar-track{flex:1;height:4px;background:rgba(255,98,89,0.12);border-radius:2px;overflow:hidden;min-width:50px}
+.var-bar-fill{height:100%;border-radius:2px;background:var(--crit);transition:width .6s ease}
+.row-atencao td{background:rgba(243,156,18,0.03)}
+.row-critico td{background:rgba(255,98,89,0.04)}
+.row-fora    td{background:rgba(149,165,166,0.04)}
+
+/* ── Recorrente: dots + score ───────────────────────── */
+.dias-dots{display:flex;align-items:center;gap:3px;flex-wrap:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-muted{background:var(--muted);opacity:.5}
+.dot-warn{background:var(--warn)}
+.dot-crit{background:var(--crit)}
+.score-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:1px 5px;border-radius:3px}
+.score-lo{color:var(--muted)}
+.score-md{color:var(--warn)}
+.score-hi{color:var(--crit)}
+
+/* ── Evolução OLT: controles do gráfico ────────────── */
+.olt-barras-wrap{height:170px;position:relative}
+/* ── Evolução redesign v3 ── */
+.ev-main-layout{display:grid;grid-template-columns:1fr 300px;gap:16px;margin-bottom:14px}
+.ev-charts-col{display:flex;flex-direction:column;min-width:0;gap:4px}
+.ev-linha-g{height:145px;position:relative}
+.ev-linha-p{height:125px;position:relative}
+.ev-sum-col{display:flex;flex-direction:column;min-width:0;border-left:2px solid var(--border);padding-left:14px}
+.ev-sub-lbl{font-size:9px;color:var(--accent);letter-spacing:0.14em;text-transform:uppercase;font-family:var(--mono);margin-bottom:5px;margin-top:10px}
+.ev-sub-lbl:first-child{margin-top:0}
+.ev-sum-t{width:100%;border-collapse:collapse}
+.ev-sum-t th{font-size:9px;color:var(--muted);font-family:var(--mono);letter-spacing:0.08em;text-align:right;padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--bg3)}
+.ev-sum-t th:first-child{text-align:left;min-width:110px}
+.ev-sum-t td{padding:5px 6px;border-bottom:1px solid rgba(55,138,221,0.07);text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.ev-sum-t td:first-child{text-align:left;font-family:'DM Sans';font-size:12px;color:var(--text);white-space:nowrap;min-width:110px}
+.ev-sum-t tr:hover td{background:rgba(55,138,221,0.06)}
+.ev-var-up{color:var(--crit)!important;font-weight:700}
+.ev-var-dn{color:var(--ok)!important;font-weight:700}
+.ev-var-eq{color:var(--muted)!important}
+.ev-st-piora{color:var(--crit);font-weight:700;font-size:11px}
+.ev-st-melhora{color:var(--ok);font-weight:700;font-size:11px}
+.ev-st-est{color:var(--muted);font-size:11px}
+.olt-section-lbl{font-size:9px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;font-family:var(--mono);margin:8px 0 4px;display:flex;align-items:center;gap:8px}
+.olt-section-lbl::after{content:'';flex:1;height:1px;background:var(--border)}
+.olt-snap-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+.olt-mini-t{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px}
+.olt-mini-t th{font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);padding:4px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;background:var(--bg3)}
+.olt-mini-t td{padding:4px 8px;border-bottom:1px solid rgba(55,138,221,.05);white-space:nowrap}
+.olt-mini-t tr:last-child td{border-bottom:none}
+.olt-mini-t tr:hover td{background:rgba(55,138,221,.04)}
+.trend-up{color:var(--crit);font-family:var(--mono);font-size:10px}
+.trend-dn{color:var(--ok);font-family:var(--mono);font-size:10px}
+.trend-eq{color:var(--muted);font-family:var(--mono);font-size:10px}
+.olt-chart-controls{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+
+
+
+
+
+
+
+
+
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">CARREGANDO HISTÓRICO...</div>
+</div>
+
+<header style="position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:rgba(8,14,26,0.95);backdrop-filter:blur(10px)">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 2s infinite"></div>
+    <div>
+      <div style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.12em;color:var(--accent)">OTDR PREVENTIVO</div>
+      <div style="font-size:11px;color:var(--muted);letter-spacing:0.06em;margin-top:1px">CANAÃ TELECOM — HISTÓRICO DE SINAL</div>
+    </div>
+  </div>
+  <nav style="display:flex;gap:4px">
+    <a href="/historico" class="nav-btn active">HISTÓRICO</a>
+    <a href="/" class="nav-btn">SINAL</a>
+    <a href="/os" class="nav-btn">OS</a>
+    <a href="/kpis" class="nav-btn">KPIs</a>
+    <a href="/mapa" class="nav-btn">MAPA</a>
+  </nav>
+</header>
+
+<main>
+
+  <!-- Filtro de período -->
+  <div style="display:flex;align-items:flex-end;gap:12px;padding:14px 0 4px;flex-wrap:wrap">
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <label style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase">De</label>
+      <input type="date" id="dtIni" class="filter-inp" style="width:150px">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <label style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase">Até</label>
+      <input type="date" id="dtFim" class="filter-inp" style="width:150px">
+    </div>
+    <button onclick="aplicarFiltro()" style="padding:7px 18px;background:transparent;border:1px solid var(--accent);border-radius:4px;color:var(--accent);font-family:var(--mono);font-size:11px;cursor:pointer;letter-spacing:0.08em;transition:all 0.2s;align-self:flex-end" onmouseover="this.style.background='rgba(55,138,221,0.1)'" onmouseout="this.style.background='transparent'">🔍 FILTRAR</button>
+    <button onclick="resetarFiltro()" style="padding:7px 14px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:var(--mono);font-size:11px;cursor:pointer;letter-spacing:0.08em;transition:all 0.2s;align-self:flex-end" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">✕ 30 dias</button>
+    <span id="periodoLabel" style="font-family:var(--mono);font-size:10px;color:var(--muted);align-self:flex-end;padding-bottom:9px"></span>
+  </div>
+
+
+  <!-- KPI Row -->
+  <div class="kpi-row">
+    <div class="kpi-card c-accent" style="animation-delay:.05s">
+      <div class="kpi-label">Dias de Histórico</div>
+      <div class="kpi-val" id="kDias">--</div>
+      <div class="kpi-sub">snapshots acumulados</div>
+    </div>
+    <div class="kpi-card c-warn" style="animation-delay:.1s">
+      <div class="kpi-label">Degradadas Hoje</div>
+      <div class="kpi-val" id="kHoje">--</div>
+      <div class="kpi-sub" id="kHojeDetalhe">atenção + crítico + fora</div>
+    </div>
+    <div class="kpi-card c-crit" style="animation-delay:.15s">
+      <div class="kpi-label">Pior RX Hoje</div>
+      <div class="kpi-val" id="kPior">--</div>
+      <div class="kpi-sub">dBm — sinal mais fraco</div>
+    </div>
+    <div class="kpi-card c-dead" style="animation-delay:.2s">
+      <div class="kpi-label">Recorrentes</div>
+      <div class="kpi-val" id="kRecorrentes">--</div>
+      <div class="kpi-sub">ONUs em 2+ snapshots</div>
+    </div>
+  </div>
+
+  <!-- Evolução diária -->
+  <div class="section" style="animation-delay:.25s">
+    <div class="sec-header">
+      <span class="sec-title">Evolução diária — degradadas por nível</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--muted)" id="periodoLabel"></span>
+    </div>
+    <div class="chart-wrap"><canvas id="chartEv"></canvas></div>
+    <div class="day-cards" id="dayCards"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div style="animation:fadeUp .4s ease .3s both">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('piora',this)">⚠ PIORA DE SINAL</button>
+      <button class="tab-btn" onclick="showTab('recorrente',this)">↺ DEGRADAÇÃO RECORRENTE</button>
+      <button class="tab-btn" onclick="showTab('evolucao',this)">↗ EVOLUÇÃO POR OLT</button>
+    </div>
+    <div class="tab-panels">
+
+      <!-- Tab Piora -->
+      <div id="tab-piora" class="tab-panel active">
+        <div class="tab-toolbar">
+          <span class="tab-desc">ONUs cujo sinal deteriorou entre snapshots consecutivos. Exige atenção imediata.</span>
+          <button class="btn-export" id="btnExportPiora" onclick="exportar('piora')" disabled>↓ EXCEL</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Serial Number</th><th>OLT</th><th>Zona</th><th>Tipo ONU</th>
+                <th>Data anterior</th><th>RX anterior</th>
+                <th>RX atual</th><th>Variação</th><th>Nível</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyPiora">
+              <tr><td colspan="9" class="empty">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Recorrente -->
+      <div id="tab-recorrente" class="tab-panel">
+        <div class="tab-toolbar">
+          <span class="tab-desc">ONUs degradadas em múltiplos dias. Prioridade para manutenção preventiva.</span>
+          <select class="filter-sel" id="filtOltRec" onchange="filtrarRecorrente()"><option value="">Todas as OLTs</option></select>
+          <input class="filter-inp" type="text" id="filtSnRec" placeholder="Buscar serial..." onkeydown="if(event.key==='Enter')filtrarRecorrente()" oninput="filtrarRecorrente()">
+          <button class="btn-export" id="btnExportRec" onclick="exportar('recorrente')" disabled>↓ EXCEL</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Serial Number</th><th>OLT</th><th>Zona</th><th>Tipo</th>
+                <th>Dias</th><th>Primeiro</th><th>Último</th>
+                <th>Pior RX</th><th>Média RX</th><th>Score ↓</th><th>Nível</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyRecorrente">
+              <tr><td colspan="11" class="empty">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Evolução OLT -->
+      <div id="tab-evolucao" class="tab-panel">
+        <div class="tab-toolbar">
+          <span class="tab-desc">Tendência de degradação por OLT no período. Abaixo: composição por snapshot.</span>
+          <button class="btn-export" id="btnExportEv" onclick="exportar('evolucao')" disabled>↓ EXCEL</button>
+        </div>
+
+        <!-- Layout principal: gráficos de linha + tabela resumo -->
+        <div class="ev-main-layout">
+          <div class="ev-charts-col">
+            <div class="ev-sub-lbl">Grandes regiões — Águas Claras &amp; Taguatinga</div>
+            <div class="ev-linha-g"><canvas id="chartLinhaG"></canvas></div>
+            <div class="ev-sub-lbl">Demais regiões</div>
+            <div class="ev-linha-p"><canvas id="chartLinhaP"></canvas></div>
+          </div>
+          <div class="ev-sum-col">
+            <div class="ev-sub-lbl">Resumo por região</div>
+            <div class="table-scroll" style="flex:1;max-height:288px">
+              <table class="ev-sum-t">
+                <thead id="evSumHead"></thead>
+                <tbody id="evSumBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barras empilhadas por snapshot -->
+        <div class="olt-section-lbl" style="margin-top:4px">
+          Composição por snapshot
+          <select class="filter-sel" id="selDataEv" onchange="renderOltBarras()" style="font-size:10px;padding:3px 8px;height:24px">
+            <option value="">-- data --</option>
+          </select>
+          <span style="font-size:10px;color:var(--muted)" id="oltChartInfo"></span>
+        </div>
+        <div class="olt-barras-wrap"><canvas id="chartOlt"></canvas></div>
+        <div class="table-scroll" style="max-height:150px;margin-top:8px">
+          <table class="olt-mini-t">
+            <thead><tr>
+              <th>OLT</th><th>Pior RX</th><th>Média RX</th><th>ONUs</th><th>vs anterior</th>
+            </tr></thead>
+            <tbody id="oltMiniTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let _piora=[], _recorrente=[], _evolucao=[];
+let chartEv=null, chartOlt=null, _chartLinhaG=null, _chartLinhaP=null;
+
+// ── Helpers ──────────────────────────────────────────────────
+function sinalCls(v){
+  if(v==null||v==='') return 's-dead';
+  const n=parseFloat(v);
+  if(isNaN(n)) return 's-dead';
+  if(n>=-24) return 's-ok';
+  if(n>=-26) return 's-warn';
+  if(n>=-28) return 's-crit';
+  return 's-dead';
+}
+function fmtRx(v){
+  if(v==null||v==='') return '<span class="s-dead">--</span>';
+  const n=parseFloat(v);
+  return `<span class="${sinalCls(v)}">${n.toFixed(2)} dBm</span>`;
+}
+function nivelBadge(n){
+  if(!n) return '--';
+  const s=n.toLowerCase();
+  if(s.includes('atencao')||s.includes('atenção')) return '<span class="badge b-atencao">Atenção</span>';
+  if(s.includes('critico')||s.includes('crítico')) return '<span class="badge b-critico">Crítico</span>';
+  if(s.includes('fora'))  return '<span class="badge b-fora">Fora Op.</span>';
+  return `<span class="mono">${n}</span>`;
+}
+function diasCls(d){
+  if(d>=4) return 'dias-4';
+  if(d>=2) return 'dias-2';
+  return 'dias-1';
+}
+
+// ── Tab switching ─────────────────────────────────────────────
+function showTab(id, btn){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Filter recorrente ─────────────────────────────────────────
+function filtrarRecorrente(){
+  const olt = document.getElementById('filtOltRec').value.toLowerCase();
+  const sn  = document.getElementById('filtSnRec').value.toLowerCase().trim();
+  const rows = document.querySelectorAll('#tbodyRecorrente tr[data-row]');
+  rows.forEach(tr=>{
+    const oltVal = (tr.dataset.olt||'').toLowerCase();
+    const snVal  = (tr.dataset.sn||'').toLowerCase();
+    const show = (!olt||oltVal===olt) && (!sn||snVal.includes(sn));
+    tr.style.display = show ? '' : 'none';
+  });
+}
+
+// ── Excel export ──────────────────────────────────────────────
+function exportar(tab){
+  let rows=[], cols=[], name='';
+  if(tab==='piora'){
+    name='Piora_Sinal';
+    cols=['Serial Number','OLT','Zona','Tipo','Data Anterior','RX Anterior','RX Atual','Variação (dBm)','Nível'];
+    rows=_piora.map(r=>({
+      'Serial Number':r.sn,'OLT':r.olt_name,'Zona':r.zone_name||'',
+      'Tipo':r.onu_type||'','Data Anterior':r.data_anterior,'RX Anterior':parseFloat(r.rx_anterior),
+      'RX Atual':parseFloat(r.sinal_rx),'Variação (dBm)':parseFloat((r.sinal_rx-r.rx_anterior).toFixed(2)),
+      'Nível':r.nivel_sinal
+    }));
+  } else if(tab==='recorrente'){
+    name='Degradacao_Recorrente';
+    rows=_recorrente.map(r=>({
+      'Serial Number':r.sn,'OLT':r.olt_name,'Zona':r.zone_name||'','Tipo':r.onu_type||'',
+      'Dias Degradada':r.dias_degradado,'Primeiro':r.primeira_data,'Último':r.ultima_data,
+      'Pior RX (dBm)':parseFloat(r.pior_rx),'Média RX (dBm)':parseFloat(r.media_rx),
+      'Nível predominante':r.nivel_predominante
+    }));
+  } else {
+    name='Evolucao_OLT';
+    rows=_evolucao.map(r=>({
+      'Data':r.snapshot_data,'OLT':r.olt_name,'Nível':r.nivel_sinal,
+      'Qtd ONUs':r.qtd,'Média RX':parseFloat(r.media_rx),'Pior RX':parseFloat(r.pior_rx)
+    }));
+  }
+  if(!rows.length) return;
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,name);
+  XLSX.writeFile(wb,`${name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ── diasDots: visualização de dias de degradação ─────────────
+function diasDots(n) {
+  const cap   = Math.min(n, 8);
+  const color = n >= 5 ? 'var(--crit)' : n >= 3 ? 'var(--warn)' : 'var(--muted)';
+  const cls   = n >= 5 ? 'dot-crit'    : n >= 3 ? 'dot-warn'     : 'dot-muted';
+  let html = `<div class="dias-dots">`;
+  for (let i = 0; i < cap; i++) html += `<div class="dot ${cls}"></div>`;
+  if (n > 8) html += `<span style="font-size:10px;color:${color};font-family:var(--mono)">+${n-8}</span>`;
+  html += `<span style="font-family:var(--mono);font-size:11px;color:${color};margin-left:4px;font-weight:700">${n}d</span></div>`;
+  return html;
+}
+
+// ── Paleta de cores para OLTs ────────────────────────────────
+const OLT_COLORS = [
+  '#1E88E5','#43A047','#8E24AA','#00ACC1','#F4511E',
+  '#FB8C00','#E53935','#6D4C41','#039BE5','#00897B'
+];
+const REGIAO_CORES = {
+  'Águas Claras':  '#1E88E5',
+  'Taguatinga':    '#43A047',
+  'Ceilandia':     '#8E24AA',
+  'Arniqueiras':   '#00ACC1',
+  'Sudoeste':      '#F4511E',
+  'Vicente pires': '#FB8C00',
+  'Sia':           '#E53935',
+};
+const REGIAO_NOMES = {
+  'Ceilandia':     'Ceilândia',
+  'Vicente pires': 'Vicente Pires',
+  'Sia':           'SIA',
+};
+function _regColor(reg) { return REGIAO_CORES[reg] || '#7D93AB'; }
+function _regLabel(reg) { return REGIAO_NOMES[reg] || reg; }
+
+function _getNivel(s) {
+  if (!s) return null;
+  const l = s.toLowerCase();
+  if (l.includes('atencao')||l.includes('atenção')) return 'atencao';
+  if (l.includes('critico')||l.includes('crítico')) return 'critico';
+  if (l.includes('fora'))  return 'fora';
+  return null;
+}
+
+// ── GRÁFICO 1: linha temporal por OLT ────────────────────────
+// ── Mapeamento OLT → Região (para o gráfico de linhas) ────────
+function _regiaoOlt(nome) {
+  if (!nome) return nome;
+  const n = nome.toUpperCase();
+  if (n.includes('TAGUATINGA'))                     return 'Taguatinga';
+  if (n.includes('AGUAS CLARAS') || n.includes('ÁGUAS CLARAS')) return 'Águas Claras';
+  // Capitaliza primeira letra de cada palavra para exibição limpa
+  return nome.split('-').map(p=>p.charAt(0)+p.slice(1).toLowerCase()).join('-');
+}
+
+function _buildLinhaChart(canvasId, regioes, datas, regiaoData, medRxMap, varRef) {
+  const ctxEl = document.getElementById(canvasId);
+  if (!ctxEl) return;
+  const datasets = regioes.map(reg => {
+    const cor = _regColor(reg);
+    return {
+      label: _regLabel(reg),
+      data: datas.map(d => regiaoData[reg][d] || 0),
+      borderColor: cor,
+      backgroundColor: cor + '15',
+      borderWidth: 3,
+      pointRadius: 6,
+      pointHoverRadius: 9,
+      pointBackgroundColor: cor,
+      tension: 0.3,
+      fill: false,
+      datalabels: {
+        display: (ctx) => medRxMap[reg][ctx.dataIndex] !== null,
+        formatter: (_, ctx) => {
+          const rx = medRxMap[reg][ctx.dataIndex];
+          return rx !== null ? rx.toFixed(1) : '';
+        },
+        color: '#E8EEF6',
+        backgroundColor: cor + 'DD',
+        borderRadius: 3,
+        padding: { top:2, bottom:2, left:5, right:5 },
+        font: { size: 10, family: "'Space Mono'", weight: '700' },
+        anchor: 'end', align: 'top', offset: 5, clamp: true,
+      }
+    };
+  });
+  if (varRef.chart) varRef.chart.destroy();
+  varRef.chart = new Chart(ctxEl.getContext('2d'), {
+    type: 'line',
+    data: { labels: datas, datasets },
+    plugins: [ChartDataLabels],
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        datalabels: { display: false },
+        legend: { position:'top', align:'start', labels:{ color:'#C0D4E4', font:{size:10,family:"'DM Sans'",weight:'500'}, boxWidth:10, padding:12 } },
+        tooltip: {
+          backgroundColor:'rgba(13,22,37,0.96)', borderColor:'rgba(55,138,221,0.3)', borderWidth:1,
+          titleColor:'#E8EEF6', bodyColor:'#9EBBCC',
+          titleFont:{family:"'Space Mono'",size:9}, bodyFont:{family:"'DM Sans'",size:11}, padding:8,
+          itemSort:(a,b)=>b.parsed.y-a.parsed.y,
+          callbacks:{
+            title: items => `Snapshot: ${items[0]?.label||''}`,
+            footer: items => `Total: ${items.reduce((s,i)=>s+i.parsed.y,0).toLocaleString('pt-BR')} ONUs`
+          }
+        }
+      },
+      layout: { padding: { top:22, right:10, bottom:4, left:4 } },
+      scales: {
+        x: { ticks:{color:'#6B7F96',font:{size:9},maxRotation:0}, grid:{color:'rgba(55,138,221,0.04)',lineWidth:0.7} },
+        y: { ticks:{color:'#6B7F96',font:{size:9}}, grid:{color:'rgba(55,138,221,0.04)',lineWidth:0.7}, beginAtZero:true }
+      }
+    }
+  });
+}
+
+function renderOltLinha() {
+  const data = _evolucao;
+  if (!data.length) return;
+
+  const datas = [...new Set(data.map(r=>r.snapshot_data))].sort((a,b)=>
+    a.split('/').reverse().join('').localeCompare(b.split('/').reverse().join(''))
+  );
+
+  const regiaoData = {};
+  const regiaoRx   = {};
+  data.forEach(r => {
+    const reg = _regiaoOlt(r.olt_name);
+    if (!regiaoData[reg]) regiaoData[reg] = {};
+    regiaoData[reg][r.snapshot_data] = (regiaoData[reg][r.snapshot_data]||0) + (r.qtd||0);
+    const med = parseFloat(r.media_rx), qtd = r.qtd || 0;
+    if (!isNaN(med) && qtd > 0) {
+      if (!regiaoRx[reg]) regiaoRx[reg] = {};
+      if (!regiaoRx[reg][r.snapshot_data]) regiaoRx[reg][r.snapshot_data] = {sp:0, sq:0};
+      regiaoRx[reg][r.snapshot_data].sp += med * qtd;
+      regiaoRx[reg][r.snapshot_data].sq += qtd;
+    }
+  });
+
+  const lastDate = datas[datas.length-1];
+  const todasRegioes = Object.keys(regiaoData).sort((a,b)=>
+    (regiaoData[b][lastDate]||0) - (regiaoData[a][lastDate]||0)
+  );
+
+  const medRxMap = {};
+  todasRegioes.forEach(reg => {
+    medRxMap[reg] = datas.map(d => {
+      const e = regiaoRx[reg] && regiaoRx[reg][d];
+      return (e && e.sq > 0) ? parseFloat((e.sp / e.sq).toFixed(1)) : null;
+    });
+  });
+
+  const GRANDES = ['Águas Claras', 'Taguatinga'];
+  const regG = todasRegioes.filter(r => GRANDES.includes(r));
+  const regP = todasRegioes.filter(r => !GRANDES.includes(r));
+
+  const refG = { chart: _chartLinhaG }, refP = { chart: _chartLinhaP };
+  _buildLinhaChart('chartLinhaG', regG, datas, regiaoData, medRxMap, refG);
+  _buildLinhaChart('chartLinhaP', regP, datas, regiaoData, medRxMap, refP);
+  _chartLinhaG = refG.chart;
+  _chartLinhaP = refP.chart;
+
+  // Tabela resumo
+  const thead = document.getElementById('evSumHead');
+  const tbody = document.getElementById('evSumBody');
+  if (thead && tbody) {
+    const lastD = datas[datas.length-1] || '';
+    thead.innerHTML = `<tr><th>Região</th><th>${lastD}</th><th>Variação</th><th>Status</th></tr>`;
+    tbody.innerHTML = todasRegioes.map(reg => {
+      const cor = _regColor(reg);
+      const vals = datas.map(d => regiaoData[reg][d] || 0);
+      const first = vals[0]||0, last = vals[vals.length-1]||0;
+      const delta = last - first;
+      const pct = first > 0 ? (delta/first*100) : 0;
+      const varCls = delta>0?'ev-var-up':delta<0?'ev-var-dn':'ev-var-eq';
+      const varTxt = delta>0
+        ? `↑ +${delta} (+${pct.toFixed(0)}%)`
+        : delta<0
+          ? `↓ ${delta} (${pct.toFixed(0)}%)`
+          : '→ 0';
+      const stCls = delta>0?'ev-st-piora':delta<0?'ev-st-melhora':'ev-st-est';
+      const sTxt  = delta>0?'⬆ Piora':delta<0?'⬇ Melhora':'→ Estável';
+      return `<tr>
+        <td style="white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${cor};margin-right:6px;vertical-align:middle;flex-shrink:0"></span>${_regLabel(reg)}</td>
+        <td style="font-weight:600;color:var(--text)">${last.toLocaleString('pt-BR')}</td>
+        <td class="${varCls}">${varTxt}</td>
+        <td class="${stCls}">${sTxt}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+// ── GRÁFICO 2: barras empilhadas por snapshot ─────────────────
+function renderOltBarras() {
+  const data = _evolucao;
+  if (!data.length) return;
+
+  const dataSel = document.getElementById('selDataEv').value;
+  if (!dataSel) return;
+  const filtered = data.filter(r => r.snapshot_data === dataSel);
+
+  // OLTs ordenadas por total desc
+  const oltTotals = {};
+  filtered.forEach(r => { oltTotals[r.olt_name]=(oltTotals[r.olt_name]||0)+(r.qtd||0); });
+  const olts = Object.keys(oltTotals).sort((a,b)=>oltTotals[b]-oltTotals[a]);
+
+  const datasets = [
+    { key:'fora',    label:'Fora Op.',  bg:'rgba(120,120,130,0.85)' },
+    { key:'critico', label:'Crítico',   bg:'rgba(229,57,53,0.85)'   },
+    { key:'atencao', label:'Atenção',   bg:'rgba(251,140,0,0.88)'   },
+  ].map(d => ({
+    label: d.label,
+    backgroundColor: d.bg,
+    borderWidth: 0,
+    borderRadius: 1,
+    data: olts.map(olt => {
+      const row = filtered.find(r=>r.olt_name===olt && _getNivel(r.nivel_sinal)===d.key);
+      return row ? (row.qtd||0) : 0;
+    }),
+    datalabels: {
+      display: (ctx) => ctx.parsed != null && ctx.parsed.y >= 15,
+      formatter: v => v > 0 ? v.toLocaleString('pt-BR') : '',
+      color: 'rgba(232,238,246,0.90)',
+      font: { size: 8, family: "'Space Mono'", weight: '700' },
+      anchor: 'center', align: 'center',
+    }
+  }));
+
+  const ctx = document.getElementById('chartOlt').getContext('2d');
+  if (chartOlt) chartOlt.destroy();
+  chartOlt = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: olts, datasets },
+    plugins: [ChartDataLabels],
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        datalabels: { display: false },
+        legend: { position:'top', labels:{color:'#C0D4E4',font:{size:11,family:"'DM Sans'",weight:'600'},boxWidth:14,padding:14} },
+        tooltip: {
+          backgroundColor:'rgba(13,22,37,0.96)',
+          borderColor:'rgba(55,138,221,0.3)', borderWidth:1,
+          titleColor:'#E8EEF6', bodyColor:'#7D93AB',
+          titleFont:{family:"'Space Mono'",size:9},
+          bodyFont:{family:"'DM Sans'",size:11}, padding:8,
+          callbacks:{ footer: items=>`Total: ${items.reduce((s,i)=>s+i.parsed.y,0)}` }
+        }
+      },
+      scales: {
+        x: { stacked:true, ticks:{color:'#7D93AB',font:{size:9},maxRotation:25}, grid:{color:'rgba(55,138,221,0.05)'} },
+        y: { stacked:true, ticks:{color:'#7D93AB',font:{size:9}}, grid:{color:'rgba(55,138,221,0.05)'}, beginAtZero:true }
+      }
+    }
+  });
+
+  // Atualiza info + mini-tabela
+  const total = filtered.reduce((s,r)=>s+(r.qtd||0),0);
+  document.getElementById('oltChartInfo').textContent = `${olts.length} OLTs · ${total} ONUs`;
+
+  // Encontra data anterior para calcular tendência
+  const datas = [...new Set(_evolucao.map(r=>r.snapshot_data))].sort((a,b)=>
+    a.split('/').reverse().join('').localeCompare(b.split('/').reverse().join(''))
+  );
+  const idxSel = datas.indexOf(dataSel);
+  const dataAnt = idxSel > 0 ? datas[idxSel-1] : null;
+  const filtAnt = dataAnt ? _evolucao.filter(r=>r.snapshot_data===dataAnt) : [];
+  const totAnt  = {};
+  filtAnt.forEach(r=>{ totAnt[r.olt_name]=(totAnt[r.olt_name]||0)+(r.qtd||0); });
+
+  // Pior/média RX por OLT no snapshot selecionado
+  const piorOlt={}, medOlt={};
+  filtered.forEach(r=>{
+    const rx=parseFloat(r.pior_rx);
+    if (!isNaN(rx) && (piorOlt[r.olt_name]===undefined||rx<piorOlt[r.olt_name])) piorOlt[r.olt_name]=rx;
+    const med=parseFloat(r.media_rx);
+    if (!isNaN(med)){ if(!medOlt[r.olt_name])medOlt[r.olt_name]=[]; medOlt[r.olt_name].push(med); }
+  });
+
+  document.getElementById('oltMiniTbody').innerHTML = olts.map(olt => {
+    const rx   = piorOlt[olt];
+    const meds = medOlt[olt]||[];
+    const med  = meds.length ? meds.reduce((s,v)=>s+v,0)/meds.length : null;
+    const rxCls= rx==null?'var(--muted)':rx>=-24?'var(--ok)':rx>=-26?'var(--warn)':rx>=-28?'var(--crit)':'var(--dead)';
+    const cur  = oltTotals[olt]||0;
+    const ant  = totAnt[olt]||0;
+    const diff = dataAnt ? cur - ant : null;
+    const trendHtml = diff===null
+      ? '<span class="trend-eq">—</span>'
+      : diff > 0
+        ? `<span class="trend-up">↑ +${diff}</span>`
+        : diff < 0
+          ? `<span class="trend-dn">↓ ${diff}</span>`
+          : '<span class="trend-eq">→ 0</span>';
+    return `<tr>
+      <td style="font-weight:600;font-size:11px">${olt}</td>
+      <td><span style="font-family:var(--mono);font-size:11px;color:${rxCls}">${rx!=null?rx.toFixed(2)+' dBm':'--'}</span></td>
+      <td><span class="mono">${med!=null?med.toFixed(1)+' dBm':'--'}</span></td>
+      <td><span class="mono">${cur.toLocaleString('pt-BR')}</span></td>
+      <td>${trendHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Main load ─────────────────────────────────────────────────
+
+// ── Filtro de datas ───────────────────────────────────────────
+function _getDatas(){
+  return {
+    dtIni: document.getElementById('dtIni').value,
+    dtFim: document.getElementById('dtFim').value,
+  };
+}
+function _qs(datas){
+  return `?dtIni=${datas.dtIni}&dtFim=${datas.dtFim}`;
+}
+function aplicarFiltro(){
+  const d = _getDatas();
+  if(!d.dtIni || !d.dtFim){ alert('Selecione as duas datas'); return; }
+  const dias = Math.round((new Date(d.dtFim)-new Date(d.dtIni))/(864e5));
+  document.getElementById('periodoLabel').textContent = `${dias+1} dia(s) selecionado(s)`;
+  carregar(d);
+}
+function resetarFiltro(){
+  const hoje = new Date();
+  const ini  = new Date(hoje); ini.setDate(hoje.getDate()-30);
+  document.getElementById('dtIni').value = ini.toISOString().slice(0,10);
+  document.getElementById('dtFim').value = hoje.toISOString().slice(0,10);
+  document.getElementById('periodoLabel').textContent = 'últimos 30 dias';
+  carregar(_getDatas());
+}
+
+async function carregar(datas){
+  datas = datas || _getDatas();
+  const qs = _qs(datas);
+  try{
+    const [rRes, rPiora, rRec, rEv] = await Promise.all([
+      fetch('/api/historico/resumo'+qs).then(r=>r.json()),
+      fetch('/api/historico/piora'+qs).then(r=>r.json()),
+      fetch('/api/historico/offline'+qs).then(r=>r.json()),
+      fetch('/api/historico/evolucao'+qs).then(r=>r.json()),
+    ]);
+
+    const resumo = rRes.dados||[];
+    _piora       = rPiora.dados||[];
+    _recorrente  = rRec.dados||[];
+    _evolucao    = rEv.dados||[];
+
+    // ── KPIs ──
+    document.getElementById('kDias').textContent = resumo.length.toLocaleString('pt-BR');
+    if(resumo.length){
+      const hoje = resumo[0];
+      document.getElementById('kHoje').textContent = (hoje.total_degradados||0).toLocaleString('pt-BR');
+      document.getElementById('kHojeDetalhe').textContent =
+        `${hoje.atencao} atenção · ${hoje.critico} crítico · ${hoje.fora} fora`;
+      document.getElementById('kPior').textContent =
+        hoje.pior_rx!=null ? parseFloat(hoje.pior_rx).toFixed(1) : '--';
+    }
+    document.getElementById('kRecorrentes').textContent = _recorrente.length.toLocaleString('pt-BR');
+
+    // ── Período label ──
+    if(resumo.length>1){
+      const datas = resumo.map(r=>r.snapshot_data);
+      document.getElementById('periodoLabel').textContent =
+        `${datas[datas.length-1]}  →  ${datas[0]}`;
+    }
+
+    // ── Gráfico evolução ──
+    if(resumo.length){
+      const labels   = resumo.map(r=>r.snapshot_data).reverse();
+      const dAtencao = resumo.map(r=>r.atencao||0).reverse();
+      const dCritico = resumo.map(r=>r.critico||0).reverse();
+      const dFora    = resumo.map(r=>r.fora||0).reverse();
+      const ctx = document.getElementById('chartEv').getContext('2d');
+      if(chartEv) chartEv.destroy();
+      chartEv = new Chart(ctx,{
+        type:'line',
+        data:{
+          labels,
+          datasets:[
+            {label:'Atenção',  data:dAtencao,borderColor:'#F39C12',backgroundColor:'rgba(243,156,18,0.08)', fill:true,tension:0.35,pointRadius:3,pointHoverRadius:6},
+            {label:'Crítico',  data:dCritico,borderColor:'#E74C3C',backgroundColor:'rgba(231,76,60,0.08)',  fill:true,tension:0.35,pointRadius:3,pointHoverRadius:6},
+            {label:'Fora Op.', data:dFora,   borderColor:'#7F8C8D',backgroundColor:'rgba(127,140,141,0.06)',fill:true,tension:0.35,pointRadius:3,pointHoverRadius:6},
+          ]
+        },
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          interaction:{mode:'index',intersect:false},
+          plugins:{
+            legend:{labels:{color:'#6B7F96',font:{size:11},boxWidth:12}},
+            tooltip:{
+              backgroundColor:'rgba(13,22,37,0.95)',
+              borderColor:'rgba(55,138,221,0.3)',borderWidth:1,
+              titleColor:'#E8EEF6',bodyColor:'#6B7F96',
+              titleFont:{family:"'Space Mono'",size:10},
+              bodyFont:{family:"'DM Sans'",size:12},
+              padding:10
+            }
+          },
+          scales:{
+            x:{ticks:{color:'#6B7F96',font:{size:10},maxRotation:0},grid:{color:'rgba(55,138,221,0.06)'}},
+            y:{ticks:{color:'#6B7F96',font:{size:10}},grid:{color:'rgba(55,138,221,0.06)'},beginAtZero:true}
+          }
+        }
+      });
+    }
+
+    // ── Day cards ──
+    const maxTotal = Math.max(...resumo.map(r=>r.total_degradados),1);
+    document.getElementById('dayCards').innerHTML = resumo.map(r=>`
+      <div class="day-card">
+        <div class="day-date">${r.snapshot_data}</div>
+        <div class="day-total">${(r.total_degradados||0).toLocaleString('pt-BR')}</div>
+        <div class="day-rx">${r.media_rx!=null ? 'média '+parseFloat(r.media_rx).toFixed(1)+' dBm' : '--'}</div>
+        <div class="day-bar">
+          <div class="bar-seg" style="width:${(r.atencao||0)/maxTotal*100}%;background:#F39C12"></div>
+          <div class="bar-seg" style="width:${(r.critico||0)/maxTotal*100}%;background:#E74C3C"></div>
+          <div class="bar-seg" style="width:${(r.fora||0)/maxTotal*100}%;background:#7F8C8D"></div>
+        </div>
+      </div>`).join('');
+
+    // ── Tab Piora ──────────────────────────────────────────────
+    const EMPTY_MSG = 'Necessário ao menos 2 snapshots.<br>Volte amanhã após o cron das 06:30.';
+    if (_piora.length) {
+      const maxDelta = Math.max(..._piora.map(r => Math.abs(parseFloat(r.sinal_rx) - parseFloat(r.rx_anterior))), 1);
+      document.getElementById('tbodyPiora').innerHTML = _piora.map(r => {
+        const delta   = parseFloat(r.sinal_rx) - parseFloat(r.rx_anterior);
+        const barPct  = Math.min(100, Math.abs(delta) / maxDelta * 100);
+        const nv      = (r.nivel_sinal||'').toLowerCase();
+        const rowCls  = nv.includes('fora') ? 'row-fora' : nv.includes('critico') ? 'row-critico' : nv.includes('atencao') ? 'row-atencao' : '';
+        return `<tr class="${rowCls}">
+          <td><span class="mono">${r.sn||'--'}</span></td>
+          <td>${r.olt_name||'--'}</td>
+          <td>${r.zone_name||'--'}</td>
+          <td><span class="mono">${r.onu_type||'--'}</span></td>
+          <td><span class="mono">${r.data_anterior||'--'}</span></td>
+          <td>${fmtRx(r.rx_anterior)}</td>
+          <td>${fmtRx(r.sinal_rx)}</td>
+          <td>
+            <div class="var-bar-wrap">
+              <span class="delta">▼ ${Math.abs(delta).toFixed(2)} dBm</span>
+              <div class="var-bar-track"><div class="var-bar-fill" style="width:${barPct}%"></div></div>
+            </div>
+          </td>
+          <td>${nivelBadge(r.nivel_sinal)}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      document.getElementById('tbodyPiora').innerHTML =
+        `<tr><td colspan="9" class="empty">${EMPTY_MSG}</td></tr>`;
+    }
+    document.getElementById('btnExportPiora').disabled = !_piora.length;
+
+    // ── Tab Recorrente ──────────────────────────────────────────
+    const oltsRec = [...new Set(_recorrente.map(r=>r.olt_name).filter(Boolean))].sort();
+    const selOlt = document.getElementById('filtOltRec');
+    // Limpar opções anteriores (evita duplicar ao refiltrar)
+    selOlt.querySelectorAll('option:not([value=""])').forEach(o=>o.remove());
+    oltsRec.forEach(o=>{const opt=document.createElement('option');opt.value=o;opt.textContent=o;selOlt.appendChild(opt);});
+
+    // Ordena por score de risco desc
+    const recOrdenado = [..._recorrente].sort((a,b)=>{
+      const sa = a.dias_degradado * Math.abs(parseFloat(a.pior_rx)||0);
+      const sb = b.dias_degradado * Math.abs(parseFloat(b.pior_rx)||0);
+      return sb - sa;
+    });
+
+    if (recOrdenado.length) {
+      const maxScore = recOrdenado[0].dias_degradado * Math.abs(parseFloat(recOrdenado[0].pior_rx)||1);
+      document.getElementById('tbodyRecorrente').innerHTML = recOrdenado.map(r => {
+        const score = Math.round(r.dias_degradado * Math.abs(parseFloat(r.pior_rx)||0));
+        const scorePct = maxScore > 0 ? score/maxScore*100 : 0;
+        const scoreColor = score > maxScore*0.6 ? 'var(--crit)' : score > maxScore*0.3 ? 'var(--warn)' : 'var(--muted)';
+        return `<tr data-row="1" data-olt="${r.olt_name||''}" data-sn="${r.sn||''}">
+          <td><span class="mono">${r.sn||'--'}</span></td>
+          <td>${r.olt_name||'--'}</td>
+          <td>${r.zone_name||'--'}</td>
+          <td><span class="mono">${r.onu_type||'--'}</span></td>
+          <td>${diasDots(r.dias_degradado)}</td>
+          <td><span class="mono">${r.primeira_data||'--'}</span></td>
+          <td><span class="mono">${r.ultima_data||'--'}</span></td>
+          <td>${fmtRx(r.pior_rx)}</td>
+          <td>${fmtRx(r.media_rx)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="flex:1;min-width:44px;height:4px;background:rgba(55,138,221,0.1);border-radius:2px;overflow:hidden">
+                <div style="width:${scorePct}%;height:100%;background:${scoreColor};border-radius:2px;transition:width .6s"></div>
+              </div>
+              <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${scoreColor}">${score}</span>
+            </div>
+          </td>
+          <td>${nivelBadge(r.nivel_predominante)}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      document.getElementById('tbodyRecorrente').innerHTML =
+        `<tr><td colspan="11" class="empty">${EMPTY_MSG}</td></tr>`;
+    }
+    document.getElementById('btnExportRec').disabled = !_recorrente.length;
+
+    // ── Tab Evolução OLT ────────────────────────────────────────
+    // Popula seletor de datas (datas únicas, mais recente primeiro)
+    const datasEv = [...new Set(_evolucao.map(r=>r.snapshot_data))].sort((a,b)=>{
+      // formato dd/mm/yyyy → comparar invertido
+      const pa = a.split('/').reverse().join('');
+      const pb = b.split('/').reverse().join('');
+      return pb.localeCompare(pa);
+    });
+    const selData = document.getElementById('selDataEv');
+    selData.querySelectorAll('option:not([value=""])').forEach(o=>o.remove());
+    datasEv.forEach(d=>{const opt=document.createElement('option');opt.value=d;opt.textContent=d;selData.appendChild(opt);});
+    if (datasEv.length) selData.value = datasEv[0];
+    renderOltLinha();   // gráfico 1: linhas temporais
+    renderOltBarras();  // gráfico 2: barras do snapshot mais recente
+    document.getElementById('btnExportEv').disabled = !_evolucao.length;
+
+  } catch(e){
+    console.error('Erro ao carregar histórico:', e);
+    document.getElementById('tbodyPiora').innerHTML =
+      `<tr><td colspan="9" class="empty">Erro ao carregar: ${e.message}</td></tr>`;
+  } finally {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  }
+}
+
+// Inicializa datas (últimos 30 dias)
+(function(){
+  const hoje = new Date();
+  const ini  = new Date(hoje); ini.setDate(hoje.getDate()-30);
+  document.getElementById('dtIni').value = ini.toISOString().slice(0,10);
+  document.getElementById('dtFim').value = hoje.toISOString().slice(0,10);
+  document.getElementById('periodoLabel').textContent = 'últimos 30 dias';
+})();
+carregar(_getDatas());
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+*.env
+!.env.example
+logs/
+*.log
+nohup.out
+cache_onus.json
+*.bak*
+.claude/
+.DS_Store

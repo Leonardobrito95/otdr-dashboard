@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa de Sinal — CANAÃ Telecom</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<!-- MarkerCluster CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<style>
+  :root{--bg:#080E1A;--bg2:#0D1625;--bg3:#111E30;--border:rgba(55,138,221,0.15);
+        --accent:#378ADD;--ok:#2ECC71;--warn:#F39C12;--crit:#FF6259;--dead:#95A5A6;
+        --text:#E8EEF6;--muted:#7D93AB;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+  /* Header */
+  header{position:relative;z-index:1000;display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:rgba(8,14,26,0.97);backdrop-filter:blur(10px);flex-shrink:0}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  .logo-title{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.12em;color:var(--accent)}
+  .logo-sub{font-size:11px;color:var(--muted);letter-spacing:0.08em;margin-top:1px}
+  nav{display:flex;gap:4px}
+  .nav-btn{padding:6px 14px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all 0.2s}
+  .nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .nav-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(55,138,221,0.1)}
+  /* Painel lateral */
+  .layout{display:flex;flex:1;overflow:hidden}
+  .sidebar{width:280px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;z-index:500}
+  .sidebar-section{padding:16px;border-bottom:1px solid var(--border)}
+  .sidebar-title{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  /* KPIs no painel */
+  .kpi-row{display:flex;gap:8px;margin-bottom:8px}
+  .kpi-mini{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;text-align:center}
+  .kpi-mini-val{font-family:var(--mono);font-size:16px;font-weight:700;line-height:1}
+  .kpi-mini-label{font-size:10px;color:var(--muted);letter-spacing:0.06em;margin-top:3px;text-transform:uppercase}
+  /* Filtros de nível */
+  .filter-check{display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;user-select:none}
+  .filter-check input[type=checkbox]{display:none}
+  .check-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;transition:opacity 0.2s}
+  .filter-check.off .check-dot{opacity:0.25}
+  .filter-check.off .check-label{color:var(--muted);opacity:0.5}
+  .check-label{font-size:13px;transition:color 0.2s}
+  .check-count{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  /* Botões */
+  .btn-refresh{width:100%;padding:8px;background:transparent;border:1px solid var(--accent);border-radius:4px;color:var(--accent);font-family:var(--mono);font-size:11px;cursor:pointer;letter-spacing:0.08em;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px}
+  .btn-refresh:hover{background:rgba(55,138,221,0.1)}
+  .btn-refresh:disabled{opacity:0.4;cursor:not-allowed}
+  /* Cobertura */
+  .coverage-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:6px}
+  .coverage-fill{height:100%;background:var(--accent);border-radius:2px;transition:width 0.5s}
+  .coverage-label{font-size:11px;color:var(--muted);margin-top:4px}
+  /* Toggle POPs */
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
+  .toggle-label{font-size:13px;color:var(--text)}
+  .toggle{position:relative;width:32px;height:18px;cursor:pointer}
+  .toggle input{display:none}
+  .toggle-track{position:absolute;inset:0;background:var(--bg3);border:1px solid var(--border);border-radius:9px;transition:all 0.2s}
+  .toggle input:checked ~ .toggle-track{background:rgba(55,138,221,0.25);border-color:var(--accent)}
+  .toggle-thumb{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--muted);transition:all 0.2s}
+  .toggle input:checked ~ .toggle-thumb{left:16px;background:var(--accent)}
+  /* toggle via classe JS */
+  .toggle-on .toggle-track{background:rgba(55,138,221,0.25)!important;border-color:var(--accent)!important}
+  .toggle-on .toggle-thumb{left:16px!important;background:var(--accent)!important}
+  /* Status bar */
+  .status-bar{padding:8px 16px;background:var(--bg3);border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em;flex-shrink:0}
+  /* Mapa */
+  #map{flex:1;z-index:1;height:100%}
+  /* Leaflet overrides */
+  .leaflet-container{background:#060C18 !important;font-family:var(--sans)}
+  .leaflet-tile{filter:brightness(0.85) saturate(0.7) hue-rotate(190deg)}
+  .leaflet-popup-content-wrapper{background:var(--bg2);border:1px solid rgba(55,138,221,0.3);border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,0.6);color:var(--text);font-family:var(--sans)}
+  .leaflet-popup-tip{background:var(--bg2)}
+  .leaflet-popup-content{margin:12px 14px;font-size:13px}
+  .popup-nome{font-weight:600;font-size:14px;margin-bottom:6px}
+  .popup-row{display:flex;justify-content:space-between;gap:16px;font-size:12px;margin-top:3px}
+  .popup-key{color:var(--muted)}
+  .popup-val{font-family:var(--mono);font-weight:600}
+  .popup-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;margin-top:6px}
+  .popup-btn{display:inline-block;margin-top:8px;padding:4px 10px;border:1px solid var(--accent);border-radius:3px;color:var(--accent);font-family:var(--mono);font-size:10px;cursor:pointer;text-decoration:none;transition:all 0.2s}
+  .popup-btn:hover{background:rgba(55,138,221,0.1)}
+  /* Spinner */
+  .map-loading{position:absolute;inset:0;background:rgba(8,14,26,0.8);display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:12px}
+  .spinner{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .map-loading-text{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.1em}
+  /* Cluster override */
+  .marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(8,14,26,0.7)!important;border:1px solid rgba(55,138,221,0.3)!important}
+  .marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:rgba(55,138,221,0.15)!important;color:#E8EEF6!important;font-family:'Space Mono',monospace!important;font-size:11px!important}
+
+  /* Modal Ver Sinal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(4,8,18,0.82);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:9000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.25s}
+  .modal-overlay.open{opacity:1;pointer-events:all}
+  .modal{background:var(--bg2);border:1px solid rgba(55,138,221,0.35);border-radius:8px;width:min(1000px,95vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,0.7);transform:translateY(14px) scale(0.99);transition:transform 0.25s,opacity 0.25s}
+  .modal-overlay.open .modal{transform:translateY(0) scale(1)}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .modal-title{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.1em;color:var(--accent)}
+  .modal-subtitle{font-size:12px;color:var(--muted);margin-top:2px}
+  .modal-close{width:28px;height:28px;border-radius:4px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+  .modal-close:hover{border-color:var(--crit);color:var(--crit)}
+  .modal-body{overflow:auto;flex:1;padding:0}
+  .modal-body::-webkit-scrollbar{width:5px;height:5px}
+  .modal-body::-webkit-scrollbar-track{background:var(--bg3)}
+  .modal-body::-webkit-scrollbar-thumb{background:rgba(55,138,221,0.3);border-radius:3px}
+  .modal-footer{padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
+  .modal-footer-info{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .modal table{min-width:760px;width:100%;border-collapse:collapse}
+  .modal thead th{background:var(--bg3);position:sticky;top:0;z-index:2;padding:9px 12px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .modal td{padding:8px 12px;border-bottom:1px solid rgba(55,138,221,0.06);font-size:12px;white-space:nowrap}
+  .btn-refresh-modal{padding:5px 12px;background:transparent;border:1px solid rgba(55,138,221,0.35);border-radius:4px;color:var(--accent);font-family:var(--mono);font-size:10px;letter-spacing:.06em;cursor:pointer;transition:all 0.2s;white-space:nowrap}
+  .btn-refresh-modal:hover{background:rgba(55,138,221,0.1);border-color:var(--accent)}
+  .btn-refresh-modal:disabled{opacity:.4;pointer-events:none}
+  /* Tooltip sinal */
+  .sinal-tip{position:relative;cursor:help}
+  .sinal-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid rgba(55,138,221,0.25);color:var(--text);font-family:var(--mono);font-size:10px;padding:5px 9px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.15s;z-index:99;line-height:1.5}
+  .sinal-tip:hover::after{opacity:1}
+  /* Skeleton */
+  @keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
+  .skel{background:linear-gradient(90deg,var(--bg3) 25%,rgba(55,138,221,0.07) 50%,var(--bg3) 75%);background-size:600px 100%;animation:shimmer 1.4s infinite;border-radius:3px;height:11px;display:inline-block}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" style="gap:10px;align-items:center">
+    <img src="/static/logo.png" alt="CANAÃ Telecom" style="height:36px;width:auto;object-fit:contain">
+    <div>
+      <div class="logo-title">CANAÃ TELECOM</div>
+      <div class="logo-sub">MAPA DE SINAL</div>
+    </div>
+  </div>
+  <nav>
+    <a href="/"         class="nav-btn">SINAL</a>
+    <a href="/os"       class="nav-btn">OS</a>
+    <a href="/historico" class="nav-btn">HISTÓRICO</a>
+    <a href="/kpis"     class="nav-btn">KPIs</a>
+    <a href="/mapa"     class="nav-btn active">MAPA</a>
+  </nav>
+</header>
+
+<div class="layout">
+  <!-- Painel lateral -->
+  <div class="sidebar">
+
+    <!-- KPIs resumo -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Visão Geral</div>
+      <div class="kpi-row">
+        <div class="kpi-mini">
+          <div class="kpi-mini-val" id="kTotal" style="color:var(--text)">--</div>
+          <div class="kpi-mini-label">Mapeados</div>
+        </div>
+        <div class="kpi-mini">
+          <div class="kpi-mini-val" id="kDeg" style="color:var(--crit)">--</div>
+          <div class="kpi-mini-label">Degradados</div>
+        </div>
+      </div>
+      <div class="coverage-bar"><div class="coverage-fill" id="covFill" style="width:0"></div></div>
+      <div class="coverage-label" id="covLabel">Cobertura GPS: calculando...</div>
+    </div>
+
+    <!-- Filtros por nível -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Filtrar por Nível</div>
+      <div class="filter-check" data-nivel="Normal" onclick="toggleNivel(this)">
+        <div class="check-dot" style="background:var(--ok)"></div>
+        <span class="check-label">Normal</span>
+        <span class="check-count" id="cnt-Normal">0</span>
+      </div>
+      <div class="filter-check" data-nivel="Atencao" onclick="toggleNivel(this)">
+        <div class="check-dot" style="background:var(--warn)"></div>
+        <span class="check-label">Atenção</span>
+        <span class="check-count" id="cnt-Atencao">0</span>
+      </div>
+      <div class="filter-check" data-nivel="Critico" onclick="toggleNivel(this)">
+        <div class="check-dot" style="background:var(--crit)"></div>
+        <span class="check-label">Crítico</span>
+        <span class="check-count" id="cnt-Critico">0</span>
+      </div>
+      <div class="filter-check" data-nivel="Fora de Operacao" onclick="toggleNivel(this)">
+        <div class="check-dot" style="background:var(--dead)"></div>
+        <span class="check-label">Fora Op.</span>
+        <span class="check-count" id="cnt-Fora">0</span>
+      </div>
+      <div class="filter-check" data-nivel="Sem leitura" onclick="toggleNivel(this)">
+        <div class="check-dot" style="background:var(--muted)"></div>
+        <span class="check-label">Sem Leitura</span>
+        <span class="check-count" id="cnt-Sem">0</span>
+      </div>
+    </div>
+
+    <!-- Toggle POPs -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Infraestrutura</div>
+      <div class="toggle-row">
+        <span class="toggle-label">📡 POPs / OLTs</span>
+        <div class="toggle toggle-on" id="togglePopsDiv" onclick="togglePopsClick()" style="cursor:pointer">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">⊞ Pontos Individuais</span>
+        <div class="toggle" id="btnCluster" onclick="toggleClusters()" style="cursor:pointer">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ações -->
+    <div class="sidebar-section">
+      <button class="btn-refresh" id="btnRefresh" onclick="carregarMapa(false)">
+        <span id="refreshIcon">⟳</span> Atualizar Mapa
+      </button>
+      <div style="margin-top:8px">
+        <button class="btn-refresh" style="border-color:var(--warn);color:var(--warn)" onclick="carregarMapa(true)">
+          ⚡ Ao Vivo (sem cache)
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Aviso de cobertura -->
+    <div class="sidebar-section" style="margin-top:auto">
+      <div style="background:rgba(55,138,221,0.06);border:1px solid rgba(55,138,221,0.2);border-radius:4px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--accent);margin-bottom:6px;text-transform:uppercase">⚠ Sobre este mapa</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6">
+          Exibe apenas clientes com coordenadas cadastradas no IXC (<strong style="color:var(--text)">≈13% da base</strong>). Pontos fora do lugar indicam endereço incorreto no cadastro do cliente.
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--muted);font-family:var(--mono)">
+          Para ampliar a cobertura, atualize a geolocalização no cadastro do cliente no IXC Provedor.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Mapa -->
+  <div style="flex:1;position:relative;display:flex;flex-direction:column;min-height:0">
+    <div class="map-loading" id="mapLoading">
+      <div class="spinner"></div>
+      <div class="map-loading-text">CARREGANDO PONTOS...</div>
+    </div>
+    <div id="mapaErro" style="display:none;position:absolute;inset:0;background:rgba(8,14,26,0.92);z-index:1500;align-items:center;justify-content:center"></div>
+    <div id="map"></div>
+  </div>
+</div>
+
+<div class="status-bar" id="statusBar">Aguardando dados...</div>
+
+
+<!-- Modal Ver Sinal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)fecharModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">SINAL — SMARTOLT</div>
+        <div class="modal-subtitle" id="modalSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <table>
+        <thead>
+          <tr>
+            <th>SN / Modelo</th><th>Status</th><th>RX (dBm)</th><th>TX (dBm)</th>
+            <th>OLT</th><th>PON</th><th>Slot</th><th>Porta</th><th>Nível</th><th>Dist.</th>
+          </tr>
+        </thead>
+        <tbody id="modalTbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <span class="modal-footer-info" id="modalFooter"></span>
+      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta à SmartOLT ignorando o cache">⟳ AO VIVO</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// ── Cores por nível ──────────────────────────────────────────
+const COR = {
+  'Normal':            '#2ECC71',
+  'Atencao':           '#F39C12',
+  'Critico':           '#FF6259',
+  'Fora de Operacao':  '#95A5A6',
+  'Sem leitura':       '#7D93AB',
+};
+const LABEL = {
+  'Normal':'Normal','Atencao':'Atenção','Critico':'Crítico',
+  'Fora de Operacao':'Fora Op.','Sem leitura':'Sem Leitura'
+};
+
+// ── Estado ───────────────────────────────────────────────────
+let _pontos    = [];
+let _pops      = [];
+let _nivelAtivo = new Set(['Normal','Atencao','Critico','Fora de Operacao']); // Sem leitura off por padrão
+let _layers    = {};   // nivel → LayerGroup
+let _popsLayer = null;
+let _map       = null;
+
+// ── Inicializa mapa ──────────────────────────────────────────
+function initMap() {
+  _map = L.map('map', {
+    center: [-15.84, -48.04],
+    zoom: 12,
+    zoomControl: true,
+    preferCanvas: true,
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(_map);
+
+  // Fix z-index do container
+  _map.getContainer().style.background = '#060C18';
+  // inicializa layer vazio para o toggle não quebrar antes do load
+  _popsLayer = L.layerGroup().addTo(_map);
+}
+
+// ── Criar ícone circular por nível ───────────────────────────
+function criarIcone(nivel, r=7) {
+  const cor = COR[nivel] || '#7D93AB';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${r*2+4}" height="${r*2+4}">
+    <circle cx="${r+2}" cy="${r+2}" r="${r}" fill="${cor}" fill-opacity="0.85" stroke="#080E1A" stroke-width="1.5"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize:   [r*2+4, r*2+4],
+    iconAnchor: [r+2,   r+2],
+    popupAnchor:[0, -(r+4)],
+  });
+}
+
+// ── Ícone POP ────────────────────────────────────────────────
+function criarIconePop() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22">
+    <polygon points="11,2 20,20 2,20" fill="#378ADD" fill-opacity="0.85" stroke="#080E1A" stroke-width="1.5"/>
+    <text x="11" y="17" text-anchor="middle" font-size="9" fill="#E8EEF6" font-family="monospace">P</text>
+  </svg>`;
+  return L.divIcon({ html: svg, className:'', iconSize:[22,22], iconAnchor:[11,11], popupAnchor:[0,-14] });
+}
+
+// ── Popup de cliente ─────────────────────────────────────────
+function popupCliente(p) {
+  const cor   = COR[p.nivel] || '#7D93AB';
+  const label = LABEL[p.nivel] || p.nivel;
+  const rx    = p.rx !== null ? `${p.rx} dBm` : '—';
+  const st    = p.status || '—';
+  return `
+    <div class="popup-nome">${p.cliente_nome || '—'}</div>
+    <div class="popup-row"><span class="popup-key">ID</span><span class="popup-val">${p.cliente_id}</span></div>
+    <div class="popup-row"><span class="popup-key">SN</span><span class="popup-val" style="font-size:11px">${p.sn}</span></div>
+    <div class="popup-row"><span class="popup-key">RX</span><span class="popup-val" style="color:${cor}">${rx}</span></div>
+    <div class="popup-row"><span class="popup-key">Status</span><span class="popup-val">${st}</span></div>
+    <div style="margin-top:8px">
+      <span class="popup-badge" style="background:${cor}22;color:${cor};border:1px solid ${cor}44">${label}</span>
+      <button class="popup-btn" onclick="verSinal(${p.cliente_id},\`${p.cliente_nome}\`)">📶 Ver Sinal</button>
+    </div>`;
+}
+
+// ── Renderizar camadas ───────────────────────────────────────
+function renderizarCamadas() {
+  // Limpar camadas anteriores
+  Object.values(_layers).forEach(l => { if (_map.hasLayer(l)) _map.removeLayer(l); });
+  _layers = {};
+
+  // Contagens
+  const cnt = {};
+  _pontos.forEach(p => { cnt[p.nivel] = (cnt[p.nivel]||0) + 1; });
+
+  // Atualizar contadores na sidebar
+  document.getElementById('cnt-Normal').textContent = cnt['Normal'] || 0;
+  document.getElementById('cnt-Atencao').textContent = cnt['Atencao'] || 0;
+  document.getElementById('cnt-Critico').textContent = cnt['Critico'] || 0;
+  document.getElementById('cnt-Fora').textContent = cnt['Fora de Operacao'] || 0;
+  document.getElementById('cnt-Sem').textContent = cnt['Sem leitura'] || 0;
+
+  const niveis = ['Normal','Atencao','Critico','Fora de Operacao','Sem leitura'];
+  niveis.forEach(nivel => {
+    if (!_nivelAtivo.has(nivel)) return;
+    const cluster = _clustersAtivo ? L.markerClusterGroup({
+      maxClusterRadius: 40,
+      iconCreateFunction: function(c) {
+        const cor = COR[nivel];
+        return L.divIcon({
+          html: `<div style="background:${cor}22;border:2px solid ${cor};border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;color:${cor};font-weight:700">${c.getChildCount()}</div>`,
+          className:'', iconSize:[34,34], iconAnchor:[17,17]
+        });
+      }
+    }) : L.layerGroup();
+    const filtrados = _pontos.filter(p => p.nivel === nivel);
+    filtrados.forEach(p => {
+      const m = L.marker([p.lat, p.lon], { icon: criarIcone(nivel) });
+      m.bindPopup(popupCliente(p), { maxWidth: 280 });
+      cluster.addLayer(m);
+    });
+    _layers[nivel] = cluster;
+    _map.addLayer(cluster);
+  });
+}
+
+// ── Toggle nível ─────────────────────────────────────────────
+function toggleNivel(el) {
+  const nivel = el.dataset.nivel;
+  const ativo = _nivelAtivo.has(nivel);
+  if (ativo) {
+    _nivelAtivo.delete(nivel);
+    el.classList.add('off');
+  } else {
+    _nivelAtivo.add(nivel);
+    el.classList.remove('off');
+  }
+  renderizarCamadas();
+  // Repor POPs
+  if (_popsAtivo && _popsLayer && !_map.hasLayer(_popsLayer)) _map.addLayer(_popsLayer);
+}
+
+
+// ── Carregar dados ───────────────────────────────────────────
+
+let _popsAtivo = true;
+let _clustersAtivo = true;
+
+function togglePopsClick() {
+  _popsAtivo = !_popsAtivo;
+  const div = document.getElementById('togglePopsDiv');
+  if (div) {
+    if (_popsAtivo) div.classList.add('toggle-on');
+    else            div.classList.remove('toggle-on');
+  }
+  if (!_popsLayer) return;
+  if (_popsAtivo) { if (!_map.hasLayer(_popsLayer)) _map.addLayer(_popsLayer); }
+  else            { if (_map.hasLayer(_popsLayer))  _map.removeLayer(_popsLayer); }
+}
+
+function toggleClusters() {
+  _clustersAtivo = !_clustersAtivo;
+  const btn = document.getElementById('btnCluster');
+  if (btn) {
+    if (_clustersAtivo) btn.classList.remove('toggle-on');
+    else                btn.classList.add('toggle-on');
+  }
+  renderizarCamadas();
+  if (_popsLayer && _popsAtivo && !_map.hasLayer(_popsLayer)) _map.addLayer(_popsLayer);
+}
+
+async function carregarMapa(live=false) {
+  document.getElementById('mapLoading').style.display = 'flex';
+  document.getElementById('btnRefresh').disabled = true;
+  const toggleEl = document.querySelector('.toggle');
+  if (toggleEl) toggleEl.style.pointerEvents = 'none';
+  document.getElementById('statusBar').textContent = 'Carregando dados...';
+
+  try {
+    const url = '/api/mapa' + (live ? '?refresh=1' : '');
+    const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    const data = await resp.json();
+
+    if (data.status === 'rate_limit') {
+      const agora = new Date();
+      const reset = new Date(agora);
+      if (agora.getMinutes() < 30) { reset.setMinutes(30, 0, 0); }
+      else { reset.setHours(agora.getHours() + 1, 5, 0, 0); }
+      const resetStr = reset.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+      const el = document.getElementById('mapaErro');
+      el.innerHTML = `<div style="text-align:center;padding:32px;max-width:340px">
+        <div style="font-size:36px;margin-bottom:14px">⏳</div>
+        <div style="font-family:var(--mono);font-size:13px;color:var(--warn);font-weight:700;margin-bottom:10px;letter-spacing:0.08em">RATE LIMIT — SMARTOLT</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.8">
+          A API da SmartOLT limita consultas por hora.<br>
+          Aguarde até <strong style="color:var(--text);font-size:14px">${resetStr}</strong><br>e clique em <strong style="color:var(--accent)">Atualizar Mapa</strong>.
+        </div>
+      </div>`;
+      el.style.display = 'flex';
+      document.getElementById('statusBar').textContent =
+        `⚠ Rate limit SmartOLT — disponível após ${resetStr}`;
+      throw new Error('rate_limit_handled');
+    }
+    if (data.status !== 'ok') throw new Error(data.mensagem || 'Erro desconhecido');
+
+    _pontos = data.pontos || [];
+    _pops   = data.pops   || [];
+
+    // KPIs
+    const total = _pontos.length;
+    const deg   = _pontos.filter(p => ['Atencao','Critico','Fora de Operacao'].includes(p.nivel)).length;
+    document.getElementById('kTotal').textContent = total.toLocaleString('pt-BR');
+    document.getElementById('kDeg').textContent   = deg.toLocaleString('pt-BR');
+
+    // Cobertura: o backend retorna apenas clientes com GPS, então mostramos vs total estimado
+    // (não temos o total no response — mostrar só o que foi mapeado)
+    document.getElementById('covFill').style.width  = '13%';
+    document.getElementById('covLabel').textContent = `${total.toLocaleString('pt-BR')} clientes com GPS (≈13% da base)`;
+
+    // Renderizar pontos
+    renderizarCamadas();
+
+    // POPs
+    // limpa layer existente e repopula (evita null entre load e click)
+    if (_popsLayer) { _popsLayer.clearLayers(); } else { _popsLayer = L.layerGroup().addTo(_map); }
+    if (_pops.length) {
+      _pops.forEach(pop => {
+        const m = L.marker([pop.lat, pop.lon], { icon: criarIconePop(), zIndexOffset: 1000 });
+        m.bindPopup(`<div class="popup-nome" style="color:var(--accent)">📡 ${pop.nome}</div><div style="font-size:12px;color:var(--muted);margin-top:4px">${pop.bairro}</div>`);
+        _popsLayer.addLayer(m);
+      });
+      // adiciona ao mapa conforme estado do toggle
+      if (_popsAtivo) {
+        if (!_map.hasLayer(_popsLayer)) _map.addLayer(_popsLayer);
+      } else {
+        if (_map.hasLayer(_popsLayer)) _map.removeLayer(_popsLayer);
+      }
+    }
+
+    // Ajustar zoom para os pontos
+    if (total > 0) {
+      const bounds = L.latLngBounds(_pontos.map(p => [p.lat, p.lon]));
+      _map.invalidateSize();
+      setTimeout(() => _map.fitBounds(bounds, { padding: [60, 60] }), 100);
+    }
+
+    const agora = new Date().toLocaleString('pt-BR');
+    document.getElementById('statusBar').textContent =
+      `${total} pontos carregados — ${deg} degradados — atualizado ${agora}`;
+
+  } catch (err) {
+    if (err.message !== 'rate_limit_handled') {
+      document.getElementById('statusBar').textContent = `Erro: ${err.message}`;
+      console.error(err);
+    }
+  } finally {
+    document.getElementById('mapLoading').style.display = 'none';
+    document.getElementById('btnRefresh').disabled = false;
+    const toggleEl = document.querySelector('.toggle');
+    if (toggleEl) toggleEl.style.pointerEvents = '';
+  }
+}
+
+
+// ── Modal Ver Sinal ──────────────────────────────────────────
+let _modalClienteId = null, _modalNome = '';
+
+function renderSkeleton(){
+  return Array(3).fill(0).map(()=>`<tr>${Array(10).fill(0).map((_,i)=>{
+    const w=[80,90,50,55,70,55,70,70,65,90][i]||70;
+    return `<td><span class="skel" style="width:${w}px"></span></td>`;
+  }).join('')}</tr>`).join('');
+}
+
+function nivelBadge(n){
+  if(!n) return '<span style="color:var(--muted)">—</span>';
+  const s = String(n);
+  if(s.includes('Normal'))   return `<span style="color:var(--ok);font-weight:700">Normal</span>`;
+  if(s.includes('Atencao')||s.includes('Atenção')) return `<span style="color:var(--warn);font-weight:700">Atenção</span>`;
+  if(s.includes('Critico')||s.includes('Crítico')) return `<span style="color:var(--crit);font-weight:700">Crítico</span>`;
+  if(s.includes('Fora'))     return `<span style="color:var(--dead)">Fora Op.</span>`;
+  return `<span style="color:var(--muted)">${s}</span>`;
+}
+
+async function carregarSinal(live=false){
+  if(!_modalClienteId) return;
+  document.getElementById('btnRefreshModal').disabled = true;
+  document.getElementById('modalTbody').innerHTML = renderSkeleton();
+  document.getElementById('modalFooter').textContent = live ? 'Consultando SmartOLT ao vivo...' : 'Carregando...';
+  const ctrl = new AbortController();
+  const tid   = setTimeout(()=>ctrl.abort(), 15000);
+  try {
+    const url = `/api/cliente_sinal/${_modalClienteId}${live?'?live=1':''}`;
+    const resp = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
+    const data = await resp.json();
+    if(data.status !== 'ok') throw new Error(data.mensagem||'Erro');
+    const onus = data.onus || [];
+    if(!onus.length){
+      document.getElementById('modalTbody').innerHTML =
+        '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);font-family:var(--mono);font-size:11px">Nenhuma ONU encontrada para este cliente</td></tr>';
+    } else {
+      document.getElementById('modalTbody').innerHTML = onus.map(o=>{
+        const rx = o.sinal_rx ?? o.rx ?? null;
+        const tx = o.sinal_tx ?? o.tx ?? null;
+        const rxCls = rx===null?'color:var(--muted)':rx>=-24?'color:var(--ok)':rx>=-26?'color:var(--warn)':rx>=-28?'color:var(--crit)':'color:var(--dead)';
+        const rxFmt = rx!==null?`${Number(rx).toFixed(2)} dBm`:'—';
+        const txFmt = tx!==null?`${Number(tx).toFixed(2)} dBm`:'—';
+        const porta = [o.board, o.port, o.onu].filter(v=>v!=null&&v!=='').join('/') || '—';
+        return `<tr>
+          <td><div style="font-family:var(--mono);font-size:11px">${o.sn||'—'}</div><div style="font-size:10px;color:var(--muted)">${o.tipo||''}</div></td>
+          <td style="font-size:11px">${o.status||'—'}</td>
+          <td><span class="sinal-tip" style="${rxCls};font-family:var(--mono);font-size:12px;font-weight:700" data-tip="Normal≥-24 | Atenção-24a-26 | Crítico-26a-28 | Fora<-28">${rxFmt}</span></td>
+          <td><span style="font-family:var(--mono);font-size:12px;color:var(--muted)">${txFmt}</span></td>
+          <td style="font-size:11px;color:var(--muted)">${o.olt||'—'}</td>
+          <td style="font-family:var(--mono);font-size:11px">${o.board??'—'}</td>
+          <td style="font-family:var(--mono);font-size:11px">${o.port??'—'}</td>
+          <td style="font-family:var(--mono);font-size:11px">${o.onu??'—'}</td>
+          <td>${nivelBadge(o.nivel)}</td>
+          <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">${o.ultima_mudanca||'—'}</td>
+        </tr>`;
+      }).join('');
+    }
+    document.getElementById('modalFooter').textContent =
+      `${onus.length} ONU(s) · ${live?'SmartOLT ao vivo':'cache'} · ${new Date().toLocaleTimeString('pt-BR')}`;
+  } catch(err){
+    clearTimeout(tid);
+    const msg = err.name==='AbortError' ? 'Tempo esgotado (15s) — SmartOLT sem resposta' : `Erro: ${err.message}`;
+    document.getElementById('modalTbody').innerHTML =
+      `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--crit);font-family:var(--mono);font-size:11px">${msg}</td></tr>`;
+    document.getElementById('modalFooter').textContent = 'Falha ao carregar';
+  } finally {
+    document.getElementById('btnRefreshModal').disabled = false;
+  }
+}
+
+function verSinal(clienteId, nome){
+  _modalClienteId = clienteId;
+  _modalNome = nome;
+  document.getElementById('modalTitle').textContent = 'SINAL — ' + (nome||'#'+clienteId).toUpperCase();
+  document.getElementById('modalSubtitle').textContent = 'ID Cliente: ' + clienteId + ' · SmartOLT tempo real';
+  document.getElementById('modalOverlay').classList.add('open');
+  document.addEventListener('keydown', _escHandler);
+  carregarSinal(false);
+}
+
+function refreshModal(){ if(_modalClienteId) carregarSinal(true); }
+
+function fecharModal(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.removeEventListener('keydown', _escHandler);
+}
+
+function _escHandler(e){ if(e.key==='Escape') fecharModal(); }
+
+// ── Init ─────────────────────────────────────────────────────
+initMap();
+carregarMapa(false);
+</script>
+</body>
+</html>
