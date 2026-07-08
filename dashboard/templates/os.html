@@ -114,6 +114,7 @@
   .page-btn:disabled{opacity:0.3;pointer-events:none}
   .page-info{font-family:var(--mono);font-size:10px;color:var(--muted)}
 </style>
+<script src="/static/icons.js"></script>
 </head>
 <body>
 
@@ -131,10 +132,11 @@
     </div>
   </div>
   <nav>
-    <a href="/historico" class="nav-btn">HISTÓRICO</a>
+    <a href="/painel" class="nav-btn">PAINEL</a>
     <a href="/" class="nav-btn">SINAL</a>
-    <a href="/os" class="nav-btn active">OS</a>
-    <a href="/kpis" class="nav-btn">KPIs</a>
+    <a href="/metricas" class="nav-btn">MÉTRICAS</a>
+    <a href="/historico" class="nav-btn">HISTÓRICO</a>
+    <a href="/consulta" class="nav-btn">CONSULTA</a>
     <a href="/mapa" class="nav-btn">MAPA</a>
   </nav>
 </header>
@@ -174,17 +176,17 @@
         <button onclick="document.getElementById('filtBusca').value='';aplicarFiltros()"
                 title="Limpar" style="padding:0 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;font-size:13px;transition:all 0.2s"
                 onmouseover="this.style.borderColor='var(--crit)';this.style.color='var(--crit)'"
-                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">✕</button>
+                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><i data-lucide="x" data-size="13"></i></button>
       </div>
     </div>
     <button class="btn" id="btnBuscar" onclick="buscar()">BUSCAR</button>
-    <button class="btn btn-export" id="btnExport" onclick="exportarExcel()" disabled>↓ EXPORTAR EXCEL</button>
+    <button class="btn btn-export" id="btnExport" onclick="exportarExcel()" disabled><i data-lucide="download" data-size="12"></i> EXPORTAR EXCEL</button>
     <span class="result-count" id="resultCount">--</span>
   </div>
 
   <!-- Aviso limite 2000 -->
   <div id="limiteBanner" style="display:none;margin-bottom:12px;padding:10px 16px;background:rgba(243,156,18,0.08);border:1px solid rgba(243,156,18,0.35);border-radius:5px;display:none;align-items:center;gap:10px">
-    <span style="color:#F39C12;font-size:14px">⚠</span>
+    <span style="color:#F39C12;font-size:14px"><i data-lucide="triangle-alert" data-size="14"></i></span>
     <span style="font-size:12px;color:#F39C12;font-family:var(--mono)">LIMITE DE 2.000 REGISTROS ATINGIDO</span>
     <span style="font-size:12px;color:var(--muted)">— Refine os filtros (período menor, POP ou Assunto específico) para ver todos os dados.</span>
   </div>
@@ -317,9 +319,9 @@ function nivelSinal(rx){
   const v=parseFloat(rx);
   if(isNaN(v)) return{cls:'signal-dead',label:'--'};
   if(v>=-24) return{cls:'signal-ok',  label:v.toFixed(2)+' dBm'};
-  if(v>=-26) return{cls:'signal-warn', label:v.toFixed(2)+' dBm ▲'};
-  if(v>=-28) return{cls:'signal-crit', label:v.toFixed(2)+' dBm ▼'};
-  return           {cls:'signal-dead', label:v.toFixed(2)+' dBm ✕'};
+  if(v>=-26) return{cls:'signal-warn', label:v.toFixed(2)+' dBm '+lucide('trending-up',11)};
+  if(v>=-28) return{cls:'signal-crit', label:v.toFixed(2)+' dBm '+lucide('trending-down',11)};
+  return           {cls:'signal-dead', label:v.toFixed(2)+' dBm '+lucide('x',11)};
 }
 
 function statusLabel(s){
@@ -350,7 +352,7 @@ function renderizar(){
       <td>
         <span style="display:flex;align-items:center;gap:6px">
           ${d.nome||'--'}
-          <button class="btn-sinal" onclick="verSinal(${d.id_cliente},${JSON.stringify(d.nome||'').replace(/"/g,'&quot;')})" title="Ver sinal em tempo real">📶 Ver Sinal</button>
+          <button class="btn-sinal" onclick="verSinal(${d.id_cliente},${JSON.stringify(d.nome||'').replace(/"/g,'&quot;')})" title="Ver sinal em tempo real">${lucide('signal-high',12)} Ver Sinal</button>
         </span>
       </td>
       <td>${d.pop?`<span class="${popClass}">${d.pop}</span>`:'--'}</td>
@@ -370,10 +372,10 @@ function renderPaginacao(){
   if(total<=1){document.getElementById('pagination').innerHTML='';return;}
   let h=`<span class="page-info">${pagina}/${total}</span>`;
   h+=`<button class="page-btn" onclick="irPag(1)" ${pagina===1?'disabled':''}>«</button>`;
-  h+=`<button class="page-btn" onclick="irPag(${pagina-1})" ${pagina===1?'disabled':''}>‹</button>`;
+  h+=`<button class="page-btn" onclick="irPag(${pagina-1})" ${pagina===1?'disabled':''}>${lucide('chevron-left',11)}</button>`;
   for(let i=Math.max(1,pagina-2);i<=Math.min(total,pagina+2);i++)
     h+=`<button class="page-btn ${i===pagina?'active':''}" onclick="irPag(${i})">${i}</button>`;
-  h+=`<button class="page-btn" onclick="irPag(${pagina+1})" ${pagina===total?'disabled':''}>›</button>`;
+  h+=`<button class="page-btn" onclick="irPag(${pagina+1})" ${pagina===total?'disabled':''}>${lucide('chevron-right',11)}</button>`;
   h+=`<button class="page-btn" onclick="irPag(${total})" ${pagina===total?'disabled':''}>»</button>`;
   document.getElementById('pagination').innerHTML=h;
 }
@@ -602,7 +604,7 @@ async function carregarSinal(live=false){
       : 'Erro: ' + e.message;
     document.getElementById('modalTbody').innerHTML =
       `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--crit);font-family:var(--mono);font-size:11px;line-height:2">
-        ⚠ ${msg}<br>
+        ${lucide('triangle-alert',12)} ${msg}<br>
         <span style="font-size:10px;opacity:0.6">Verifique a conectividade com a SmartOLT.</span>
       </td></tr>`;
     document.getElementById('modalFooter').textContent = 'Falha ao carregar';
@@ -642,7 +644,7 @@ init();
         <div class="modal-title" id="modalTitle">SINAL — SMARTOLT</div>
         <div class="modal-subtitle" id="modalSubtitle"></div>
       </div>
-      <button class="modal-close" onclick="fecharModal()">✕</button>
+      <button class="modal-close" onclick="fecharModal()"><i data-lucide="x" data-size="14"></i></button>
     </div>
     <div class="modal-body">
       <table>
@@ -658,7 +660,7 @@ init();
     </div>
     <div class="modal-footer">
       <span class="modal-footer-info" id="modalFooter"></span>
-      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta à SmartOLT ignorando o cache">⟳ AO VIVO</button>
+      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta à SmartOLT ignorando o cache"><i data-lucide="rotate-cw" data-size="12"></i> AO VIVO</button>
     </div>
   </div>
 </div>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Métricas · CANAÃ Telecom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070C16;--bg2:#0D1625;--bg3:#111E30;--border:rgba(55,138,221,0.15);
+    --accent:#378ADD;--ok:#2ECC71;--warn:#F5A623;--crit:#FF5B52;--dead:#7C8CA0;
+    --text:#EAF1FA;--muted:#7D93AB;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(55,138,221,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(55,138,221,0.035) 1px,transparent 1px);background-size:44px 44px;pointer-events:none;z-index:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+  header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:10px 22px;border-bottom:1px solid var(--border);background:rgba(7,12,22,0.9);backdrop-filter:blur(12px)}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-title{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.14em;color:var(--accent)}
+  .logo-sub{font-size:11px;color:var(--muted);letter-spacing:0.1em;margin-top:2px}
+  nav{display:flex;gap:4px;flex-wrap:wrap}
+  .nav-btn{padding:6px 14px;border-radius:5px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all 0.2s}
+  .nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .nav-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(55,138,221,0.12)}
+  .header-right{display:flex;align-items:center;gap:12px}
+  .timestamp{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  main{position:relative;z-index:1;padding:18px 22px 40px;max-width:1400px;margin:0 auto}
+
+  .section{margin-bottom:22px;animation:riseIn .5s ease both}
+  .section-title{font-size:11px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;font-weight:700;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+  .panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+  .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;transition:border-color .2s}
+  .kpi-card:hover{border-color:rgba(55,138,221,.35)}
+  .kpi-label{font-size:9.5px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;font-family:var(--mono)}
+  .kpi-val{font-family:var(--mono);font-size:26px;font-weight:700;line-height:1}
+  .kpi-sub{font-size:11px;color:var(--muted);margin-top:6px}
+  .kpi-bar{height:2px;margin-top:10px;border-radius:1px;background:var(--border);overflow:hidden}
+  .kpi-bar-fill{height:100%;border-radius:1px;transition:width .8s ease}
+  .c-ok{color:var(--ok)} .c-warn{color:var(--warn)} .c-crit{color:var(--crit)} .c-dead{color:var(--dead)} .c-blue{color:var(--accent)} .c-white{color:var(--text)}
+
+  .sinal-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+
+  .dual{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:900px){ .dual{grid-template-columns:1fr} .kpi-grid{grid-template-columns:repeat(2,1fr)} .sinal-grid{grid-template-columns:repeat(2,1fr)} }
+
+  table{width:100%;border-collapse:collapse}
+  thead{background:var(--bg3)}
+  th{padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+  td{padding:9px 14px;border-bottom:1px solid rgba(55,138,221,.06);font-size:12.5px}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(55,138,221,.04)}
+  .mono{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+
+  .bar-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(55,138,221,.06)}
+  .bar-row:last-child{border-bottom:none}
+  .bar-label{font-size:12px;min-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar-track{flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:3px;transition:width .8s ease;background:var(--accent)}
+  .bar-val{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:36px;text-align:right}
+
+  .loading-overlay{position:fixed;inset:0;background:rgba(7,12,22,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px}
+  .loading-overlay.hidden{display:none}
+  .spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  .loading-text{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em}
+
+  .admin-os-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:900px){ .admin-os-row{grid-template-columns:1fr} }
+  .admin-os-group{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .admin-os-group-header{padding:10px 16px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .admin-os-group-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--muted);font-family:var(--mono)}
+  .admin-os-group-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .admin-os-cards{display:grid;grid-template-columns:1fr 1fr}
+  .admin-os-cards.cards-3{grid-template-columns:1fr 1fr 1fr}
+  .aok-card{padding:14px 16px;cursor:pointer;transition:background .18s;position:relative;border-right:1px solid var(--border)}
+  .aok-card:last-child{border-right:none}
+  .aok-card:hover{background:rgba(55,138,221,.06)}
+  .aok-card.active{background:rgba(55,138,221,.09)}
+  .aok-card-label{font-size:9.5px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono)}
+  .aok-card-chevron{font-size:10px;color:var(--muted);transition:transform .2s;margin-left:6px}
+  .aok-card.active .aok-card-chevron{transform:rotate(180deg);color:var(--accent)}
+  .aok-val{font-family:var(--mono);font-size:24px;font-weight:700;line-height:1;margin-bottom:4px}
+  .aok-sub{font-size:11px;color:var(--muted)}
+  .aok-bar{height:2px;margin-top:8px;border-radius:1px;background:rgba(55,138,221,.1);overflow:hidden}
+  .aok-bar-fill{height:100%;border-radius:1px;transition:width .8s ease}
+  .detail-panel{border-top:1px solid var(--border);overflow:hidden;max-height:0;transition:max-height .35s cubic-bezier(.4,0,.2,1);background:var(--bg3)}
+  .detail-panel.open{max-height:500px}
+  .detail-inner{padding:10px 14px 14px;overflow-y:auto;max-height:460px}
+  .detail-loading{text-align:center;padding:20px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em}
+  .detail-table{width:100%;border-collapse:collapse;font-size:12px}
+  .detail-table th{padding:6px 8px;text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);background:var(--bg2);white-space:nowrap;position:sticky;top:0}
+  .detail-table td{padding:6px 8px;border-bottom:1px solid rgba(55,138,221,.06)}
+  .detail-table tr:last-child td{border-bottom:none}
+  .detail-table tr:hover td{background:rgba(55,138,221,.04)}
+  .detail-empty{text-align:center;padding:20px;color:var(--muted);font-size:12px}
+  .dtag{display:inline-block;padding:2px 8px;border-radius:20px;font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+  .dtag-warn{background:rgba(245,166,35,.14);color:var(--warn)}
+  .dtag-crit{background:rgba(255,91,82,.14);color:var(--crit)}
+  .dtag-ok{background:rgba(46,204,113,.14);color:var(--ok)}
+  .dtag-dead{background:rgba(124,140,160,.18);color:var(--dead)}
+  .dtag-blue{background:rgba(55,138,221,.14);color:var(--accent)}
+</style>
+<script src="/static/icons.js"></script>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">CARREGANDO MÉTRICAS...</div>
+</div>
+
+<header>
+  <div class="logo">
+    <img src="/static/logo.png" alt="CANAÃ" style="height:36px;width:auto;object-fit:contain">
+    <div>
+      <div class="logo-title">MÉTRICAS</div>
+      <div class="logo-sub">VISÃO EXECUTIVA DA REDE</div>
+    </div>
+  </div>
+  <nav>
+    <a href="/painel" class="nav-btn">PAINEL</a>
+    <a href="/" class="nav-btn">SINAL</a>
+    <a href="/metricas" class="nav-btn active">MÉTRICAS</a>
+    <a href="/historico" class="nav-btn">HISTÓRICO</a>
+    <a href="/consulta" class="nav-btn">CONSULTA</a>
+    <a href="/mapa" class="nav-btn">MAPA</a>
+  </nav>
+  <div class="header-right">
+    <span class="timestamp" id="timestamp">--</span>
+  </div>
+</header>
+
+<main>
+
+  <div class="section">
+    <div class="section-title">Visão da rede · SmartOLT (tempo real)</div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Total ONUs</div><div class="kpi-val c-white" id="kTotal">--</div><div class="kpi-sub">cadastradas no SmartOLT</div><div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%;background:var(--accent)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-label">Online</div><div class="kpi-val c-ok" id="kOnline">--</div><div class="kpi-sub" id="kPctOnline">-- % da rede</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bOnline" style="background:var(--ok)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-label">Offline</div><div class="kpi-val c-crit" id="kOffline">--</div><div class="kpi-sub" id="kPctOffline">-- % da rede</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bOffline" style="background:var(--crit)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-label">Disponibilidade</div><div class="kpi-val c-ok" id="kDisp">--%</div><div class="kpi-sub">ONUs online / total</div><div class="kpi-bar"><div class="kpi-bar-fill" id="bDisp" style="background:var(--ok)"></div></div></div>
+    </div>
+    <div class="sinal-grid">
+      <div class="kpi-card"><div class="kpi-label">Sinal normal</div><div class="kpi-val c-ok" id="kNormal">--</div><div class="kpi-sub">≥ -24 dBm</div></div>
+      <div class="kpi-card"><div class="kpi-label">Atenção</div><div class="kpi-val c-warn" id="kAtencao">--</div><div class="kpi-sub">-24 a -26 dBm</div></div>
+      <div class="kpi-card"><div class="kpi-label">Crítico</div><div class="kpi-val c-crit" id="kCritico">--</div><div class="kpi-sub">-26 a -28 dBm</div></div>
+      <div class="kpi-card"><div class="kpi-label">Fora de operação</div><div class="kpi-val c-dead" id="kFora">--</div><div class="kpi-sub">&lt; -28 dBm</div></div>
+      <div class="kpi-card"><div class="kpi-label">Sem leitura</div><div class="kpi-val c-blue" id="kSem">--</div><div class="kpi-sub">sem dados de sinal</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Status operacional</div>
+    <div class="admin-os-row">
+
+      <div class="admin-os-group">
+        <div class="admin-os-group-header">
+          <div class="admin-os-group-dot" style="background:var(--warn)"></div>
+          <span class="admin-os-group-label">Administrativo · SmartOLT</span>
+        </div>
+        <div class="admin-os-cards">
+          <div class="aok-card" id="cardFalhaSync" onclick="toggleDetail('falha_sync')">
+            <div class="aok-card-label">Falha de sync<span class="aok-card-chevron" id="chvFalhaSync"><i data-lucide="chevron-down" data-size="11"></i></span></div>
+            <div class="aok-val c-warn" id="kFalhaSync">--</div>
+            <div class="aok-sub">is_failed_resync_config=1</div>
+            <div class="aok-bar"><div class="aok-bar-fill" id="bFalhaSync" style="background:var(--warn)"></div></div>
+          </div>
+          <div class="aok-card" id="cardDesab" onclick="toggleDetail('desab')">
+            <div class="aok-card-label">Desabilitadas<span class="aok-card-chevron" id="chvDesab"><i data-lucide="chevron-down" data-size="11"></i></span></div>
+            <div class="aok-val c-dead" id="kDesab">--</div>
+            <div class="aok-sub">administrative_status=Disabled</div>
+            <div class="aok-bar"><div class="aok-bar-fill" id="bDesab" style="background:var(--dead)"></div></div>
+          </div>
+        </div>
+        <div class="detail-panel" id="panelFalhaSync"><div class="detail-inner" id="innerFalhaSync"><div class="detail-loading">CARREGANDO...</div></div></div>
+        <div class="detail-panel" id="panelDesab"><div class="detail-inner" id="innerDesab"><div class="detail-loading">CARREGANDO...</div></div></div>
+      </div>
+
+      <div class="admin-os-group">
+        <div class="admin-os-group-header">
+          <div class="admin-os-group-dot" style="background:var(--accent)"></div>
+          <span class="admin-os-group-label">Chamados técnicos · IXC</span>
+        </div>
+        <div class="admin-os-cards cards-3">
+          <div class="aok-card" id="cardHoje" onclick="toggleDetail('hoje')">
+            <div class="aok-card-label">Abertos hoje<span class="aok-card-chevron" id="chvHoje"><i data-lucide="chevron-down" data-size="11"></i></span></div>
+            <div class="aok-val c-warn" id="kHoje">--</div>
+            <div class="aok-sub">chamados abertos hoje</div>
+            <div class="aok-bar"><div class="aok-bar-fill" id="bHoje" style="background:var(--warn)"></div></div>
+          </div>
+          <div class="aok-card" id="cardAberto" onclick="toggleDetail('aberto')">
+            <div class="aok-card-label">Em aberto<span class="aok-card-chevron" id="chvAberto"><i data-lucide="chevron-down" data-size="11"></i></span></div>
+            <div class="aok-val c-crit" id="kAberto">--</div>
+            <div class="aok-sub">aguardando fechamento</div>
+            <div class="aok-bar"><div class="aok-bar-fill" id="bAberto" style="background:var(--crit)"></div></div>
+          </div>
+          <div class="aok-card" id="cardRepresados" onclick="toggleDetail('represados')">
+            <div class="aok-card-label">Represados<span class="aok-card-chevron" id="chvRepresados"><i data-lucide="chevron-down" data-size="11"></i></span></div>
+            <div class="aok-val c-crit" id="kRepresados">--</div>
+            <div class="aok-sub" id="subRepresados">média -- dias em aberto</div>
+            <div class="aok-bar"><div class="aok-bar-fill" id="bRepresados" style="background:var(--crit)"></div></div>
+          </div>
+        </div>
+        <div class="detail-panel" id="panelHoje"><div class="detail-inner" id="innerHoje"><div class="detail-loading">CARREGANDO...</div></div></div>
+        <div class="detail-panel" id="panelAberto"><div class="detail-inner" id="innerAberto"><div class="detail-loading">CARREGANDO...</div></div></div>
+        <div class="detail-panel" id="panelRepresados"><div class="detail-inner" id="innerRepresados"><div class="detail-loading">CARREGANDO...</div></div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="dual">
+      <div class="panel">
+        <div class="section-title">OS por assunto · últimos 30 dias</div>
+        <div id="barAssunto"></div>
+      </div>
+      <div class="panel">
+        <div class="section-title">OS por POP · últimos 30 dias</div>
+        <div id="barPop"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Detalhamento por OLT</div>
+    <div class="panel" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>OLT</th><th>Total ONUs</th><th>Online</th><th>Offline</th><th>Crítico</th><th>Fora op.</th><th>Disponib.</th></tr></thead>
+        <tbody id="tbodyOlt"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+let _onusCache = null;
+let _kpisData  = null;
+let _loaded    = { falha_sync: false, desab: false, hoje: false, aberto: false };
+let _open      = { falha_sync: false, desab: false, hoje: false, aberto: false, represados: false };
+
+function toggleDetail(key) {
+  const isOpen = _open[key];
+  const grupos = {
+    falha_sync: ['falha_sync','desab'], desab: ['falha_sync','desab'],
+    hoje: ['hoje','aberto','represados'], aberto: ['hoje','aberto','represados'], represados: ['hoje','aberto','represados'],
+  };
+  (grupos[key] || [key]).forEach(k => {
+    _open[k] = false;
+    document.getElementById('panel' + _panelId(k)).classList.remove('open');
+    document.getElementById('card' + _cardId(k)).classList.remove('active');
+  });
+  if (!isOpen) {
+    _open[key] = true;
+    document.getElementById('panel' + _panelId(key)).classList.add('open');
+    document.getElementById('card'  + _cardId(key)).classList.add('active');
+    if (!_loaded[key]) loadDetail(key);
+  }
+}
+function _panelId(k){ return {falha_sync:'FalhaSync',desab:'Desab',hoje:'Hoje',aberto:'Aberto',represados:'Represados'}[k]; }
+function _cardId(k){ return _panelId(k); }
+
+async function loadDetail(key) {
+  _loaded[key] = true;
+  const el = document.getElementById('inner' + _panelId(key));
+  el.innerHTML = '<div class="detail-loading">CARREGANDO...</div>';
+  try {
+    if (key === 'falha_sync' || key === 'desab') {
+      if (!_onusCache) {
+        const d = await fetch('/api/onus').then(r => r.json());
+        _onusCache = d.onus || [];
+      }
+      const lista = key === 'falha_sync' ? _onusCache.filter(o => o.falha_sync) : _onusCache.filter(o => o.desabilitada);
+      el.innerHTML = renderTabelaOnus(lista);
+    } else if (key === 'represados') {
+      const sla = (_kpisData && _kpisData.os && _kpisData.os.sla) || null;
+      el.innerHTML = renderTabelaRepresados(sla);
+    } else {
+      const hoje_iso = new Date().toISOString().slice(0,10);
+      if (key === 'hoje') {
+        const d = await fetch(`/api/os?dt_ini=${hoje_iso}&dt_fim=${hoje_iso}`).then(r => r.json());
+        el.innerHTML = renderTabelaOS(d.dados || []);
+      } else {
+        const ini = new Date(); ini.setMonth(ini.getMonth() - 6);
+        const d = await fetch(`/api/os?dt_ini=${ini.toISOString().slice(0,10)}&dt_fim=${hoje_iso}`).then(r => r.json());
+        const abertos = (d.dados || []).filter(o => o.status === 'A' || o.status === 'AS');
+        el.innerHTML = renderTabelaOS(abertos);
+      }
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="detail-empty" style="color:var(--crit)">Erro: ${e.message}</div>`;
+  }
+}
+
+function nivelTag(nivel) {
+  const m = {
+    'Normal':           '<span class="dtag dtag-ok">Normal</span>',
+    'Atencao':          '<span class="dtag dtag-warn">Atenção</span>',
+    'Critico':          '<span class="dtag dtag-crit">Crítico</span>',
+    'Fora de Operacao': '<span class="dtag dtag-dead">Fora op.</span>',
+    'Sem leitura':      '<span class="dtag dtag-blue">Sem leit.</span>',
+  };
+  return m[nivel] || nivel || '--';
+}
+
+function renderTabelaOnus(lista) {
+  if (!lista.length) return `<div class="detail-empty">Nenhuma ONU encontrada ${lucide('check',14)}</div>`;
+  const rows = lista.slice(0, 200).map(o => `<tr>
+      <td class="mono">${o.sn||'--'}</td><td>${o.olt||'--'}</td>
+      <td class="mono">${o.board||'--'}/${o.port||'--'}/${o.onu||'--'}</td>
+      <td>${o.zone||'--'}</td><td>${nivelTag(o.nivel)}</td>
+      <td class="mono">${o.sinal_rx != null ? o.sinal_rx + ' dBm' : '--'}</td>
+    </tr>`).join('');
+  const extra = lista.length > 200 ? `<tr><td colspan="6" style="text-align:center;color:var(--muted);font-size:11px;padding:8px">e mais ${lista.length-200} ONUs</td></tr>` : '';
+  return `<table class="detail-table"><thead><tr><th>SN</th><th>OLT</th><th>Board/Port/ONU</th><th>Zona</th><th>Sinal</th><th>RX</th></tr></thead><tbody>${rows}${extra}</tbody></table>`;
+}
+
+function renderTabelaOS(lista) {
+  if (!lista.length) return `<div class="detail-empty">Nenhum chamado encontrado ${lucide('check',14)}</div>`;
+  const stMap = {A:'Em aberto',AS:'Em atendimento',F:'Fechado',C:'Cancelado'};
+  const rows = lista.slice(0,300).map(o => {
+    const st = stMap[o.status] || o.status || '--';
+    const stClass = o.status==='F'?'dtag-ok':o.status==='C'?'dtag-dead':o.status==='AS'?'dtag-warn':'dtag-crit';
+    return `<tr>
+      <td class="mono">#${o.id_atd}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.nome||''}">${o.nome||'--'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.assunto||''}">${o.assunto||'--'}</td>
+      <td>${o.pop||'--'}</td><td class="mono">${o.data_abertura||'--'}</td>
+      <td><span class="dtag ${stClass}">${st}</span></td>
+    </tr>`;
+  }).join('');
+  const extra = lista.length > 300 ? `<tr><td colspan="6" style="text-align:center;color:var(--muted);font-size:11px;padding:8px">e mais ${lista.length-300} chamados</td></tr>` : '';
+  return `<table class="detail-table"><thead><tr><th>#OS</th><th>Cliente</th><th>Assunto</th><th>POP</th><th>Abertura</th><th>Status</th></tr></thead><tbody>${rows}${extra}</tbody></table>`;
+}
+
+function renderTabelaRepresados(sla) {
+  if (!sla || !sla.mais_antigos || !sla.mais_antigos.length) return `<div class="detail-empty">Nenhum chamado represado ${lucide('check',14)}</div>`;
+  const resumo = `<div style="padding:10px 4px;font-size:11.5px;color:var(--muted)">
+    ${sla.total_abertos} chamado(s) em aberto · média de <b style="color:var(--text)">${sla.media_dias}</b> dia(s) ·
+    ${sla.represados_critico} com ${sla.limiares.critico}+ dias
+  </div>`;
+  const rows = sla.mais_antigos.map(o => {
+    const diasClass = o.dias_aberto >= sla.limiares.critico ? 'dtag-crit' : o.dias_aberto >= sla.limiares.atencao ? 'dtag-warn' : 'dtag-ok';
+    return `<tr>
+      <td class="mono">#${o.id_atd}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.nome||''}">${o.nome||'--'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.assunto||''}">${o.assunto||'--'}</td>
+      <td>${o.pop||'--'}</td><td class="mono">${o.data_abertura||'--'}</td>
+      <td><span class="dtag ${diasClass}">${o.dias_aberto} dia(s)</span></td>
+    </tr>`;
+  }).join('');
+  return resumo + `<table class="detail-table"><thead><tr><th>#OS</th><th>Cliente</th><th>Assunto</th><th>POP</th><th>Abertura</th><th>Tempo aberto</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function carregar() {
+  try {
+    const data = await fetch('/api/kpis').then(r => r.json());
+    if (data.status !== 'ok') throw new Error(data.mensagem);
+    _kpisData = data;
+
+    document.getElementById('timestamp').textContent = data.timestamp;
+    const r = data.rede;
+    const t = r.total_onus || 1;
+
+    document.getElementById('kTotal').textContent   = r.total_onus.toLocaleString('pt-BR');
+    document.getElementById('kOnline').textContent  = r.online.toLocaleString('pt-BR');
+    document.getElementById('kOffline').textContent = r.offline.toLocaleString('pt-BR');
+    document.getElementById('kDisp').textContent    = r.pct_online + '%';
+    document.getElementById('kPctOnline').textContent  = Math.round(r.online/t*100) + '% da rede';
+    document.getElementById('kPctOffline').textContent = Math.round(r.offline/t*100) + '% da rede';
+    document.getElementById('bOnline').style.width  = (r.online/t*100) + '%';
+    document.getElementById('bOffline').style.width = (r.offline/t*100) + '%';
+    document.getElementById('bDisp').style.width    = r.pct_online + '%';
+    document.getElementById('kNormal').textContent  = r.normal.toLocaleString('pt-BR');
+    document.getElementById('kAtencao').textContent = r.atencao.toLocaleString('pt-BR');
+    document.getElementById('kCritico').textContent = r.critico.toLocaleString('pt-BR');
+    document.getElementById('kFora').textContent    = r.fora.toLocaleString('pt-BR');
+    document.getElementById('kSem').textContent     = r.sem.toLocaleString('pt-BR');
+
+    document.getElementById('kFalhaSync').textContent = (r.falha_sync||0).toLocaleString('pt-BR');
+    document.getElementById('kDesab').textContent     = (r.desabilitadas||0).toLocaleString('pt-BR');
+    document.getElementById('bFalhaSync').style.width = ((r.falha_sync||0)/t*100) + '%';
+    document.getElementById('bDesab').style.width     = ((r.desabilitadas||0)/t*100) + '%';
+
+    const os = data.os;
+    const osMax = Math.max(os.abertos_hoje, os.em_aberto, 1);
+    document.getElementById('kHoje').textContent   = os.abertos_hoje.toLocaleString('pt-BR');
+    document.getElementById('kAberto').textContent = os.em_aberto.toLocaleString('pt-BR');
+    document.getElementById('bHoje').style.width   = (os.abertos_hoje/osMax*100) + '%';
+    document.getElementById('bAberto').style.width = (os.em_aberto/osMax*100) + '%';
+
+    if (os.sla) {
+      document.getElementById('kRepresados').textContent = os.sla.represados_critico.toLocaleString('pt-BR');
+      document.getElementById('subRepresados').textContent = `média ${os.sla.media_dias} dias em aberto`;
+      document.getElementById('bRepresados').style.width = (os.sla.represados_critico/osMax*100) + '%';
+    }
+
+    const maxAss = Math.max(...os.por_assunto.map(a=>a.qtd), 1);
+    document.getElementById('barAssunto').innerHTML = os.por_assunto.map(a => `
+      <div class="bar-row"><span class="bar-label" title="${a.assunto}">${a.assunto}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${a.qtd/maxAss*100}%"></div></div>
+      <span class="bar-val">${a.qtd}</span></div>`).join('');
+
+    const maxPop = Math.max(...os.por_pop.map(p=>p.qtd), 1);
+    document.getElementById('barPop').innerHTML = os.por_pop.map(p => `
+      <div class="bar-row"><span class="bar-label" title="${p.pop}">${p.pop}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${p.qtd/maxPop*100}%"></div></div>
+      <span class="bar-val">${p.qtd}</span></div>`).join('');
+
+    document.getElementById('tbodyOlt').innerHTML = data.por_olt.map(o => {
+      const disp = o.total ? Math.round(o.online/o.total*100) : 0;
+      const dispColor = disp >= 95 ? 'c-ok' : disp >= 85 ? 'c-warn' : 'c-crit';
+      return `<tr>
+        <td><b>${o.olt}</b></td>
+        <td><span class="mono">${o.total.toLocaleString('pt-BR')}</span></td>
+        <td><span class="mono" style="color:var(--ok)">${o.online.toLocaleString('pt-BR')}</span></td>
+        <td><span class="mono" style="color:var(--crit)">${o.offline.toLocaleString('pt-BR')}</span></td>
+        <td><span class="mono" style="color:var(--warn)">${o.critico.toLocaleString('pt-BR')}</span></td>
+        <td><span class="mono" style="color:var(--dead)">${o.fora.toLocaleString('pt-BR')}</span></td>
+        <td><span class="mono ${dispColor}">${disp}%</span></td>
+      </tr>`;
+    }).join('');
+
+  } catch(e) {
+    console.error(e);
+  } finally {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  }
+}
+
+carregar();
+</script>
+</body>
+</html>

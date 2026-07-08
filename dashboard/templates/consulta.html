@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta de Cliente · CANAÃ Telecom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070C16;--bg2:#0D1625;--bg3:#111E30;--border:rgba(55,138,221,0.15);
+    --accent:#378ADD;--ok:#2ECC71;--warn:#F5A623;--crit:#FF5B52;--dead:#7C8CA0;
+    --text:#EAF1FA;--muted:#7D93AB;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(55,138,221,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(55,138,221,0.035) 1px,transparent 1px);background-size:44px 44px;pointer-events:none;z-index:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+  header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:10px 22px;border-bottom:1px solid var(--border);background:rgba(7,12,22,0.9);backdrop-filter:blur(12px)}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-title{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:0.14em;color:var(--accent)}
+  .logo-sub{font-size:11px;color:var(--muted);letter-spacing:0.1em;margin-top:2px}
+  nav{display:flex;gap:4px}
+  .nav-btn{padding:6px 14px;border-radius:5px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;text-decoration:none;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all 0.2s}
+  .nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .nav-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(55,138,221,0.12)}
+
+  main{position:relative;z-index:1;padding:24px 22px 40px;max-width:900px;margin:0 auto}
+
+  .busca-box{display:flex;gap:10px;margin-bottom:24px;animation:riseIn .4s ease both}
+  .busca-input{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--sans);font-size:15px;padding:13px 16px;outline:none;transition:border-color .2s}
+  .busca-input:focus{border-color:var(--accent)}
+  .busca-btn{padding:0 24px;border-radius:10px;border:1px solid var(--accent);background:rgba(55,138,221,.1);color:var(--accent);font-family:var(--mono);font-size:12px;letter-spacing:.06em;cursor:pointer;transition:all .2s;white-space:nowrap}
+  .busca-btn:hover{background:rgba(55,138,221,.2)}
+  .busca-hint{font-size:11.5px;color:var(--muted);margin:-16px 0 20px;padding-left:2px}
+
+  .estado{text-align:center;padding:60px 20px;color:var(--muted);font-family:var(--mono);font-size:12px}
+  .spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px;animation:riseIn .4s ease both}
+  .card-topo{padding:18px 22px;border-bottom:1px solid var(--border)}
+  .card-nome{font-size:18px;font-weight:700}
+  .card-nome .cancelado{font-family:var(--mono);font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(245,166,35,.15);color:var(--warn);text-transform:uppercase;margin-left:8px;vertical-align:middle}
+  .card-nome .sem-vinculo{font-family:var(--mono);font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(124,140,160,.2);color:var(--dead);text-transform:uppercase;margin-left:8px;vertical-align:middle}
+  .card-meta{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:5px}
+  .card-endereco{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px}
+
+  .veredito{padding:16px 22px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--border)}
+  .veredito.ok{background:rgba(46,204,113,.07)}
+  .veredito.atencao{background:rgba(245,166,35,.08)}
+  .veredito.critico{background:rgba(255,91,82,.09)}
+  .veredito-icone{font-size:20px;flex-shrink:0;line-height:1.3}
+  .veredito-texto{font-size:14px;line-height:1.55}
+  .veredito.ok .veredito-texto{color:#8FDDB0}
+  .veredito.atencao .veredito-texto{color:#F5C784}
+  .veredito.critico .veredito-texto{color:#FF9E97}
+
+  .detalhes{padding:6px 0}
+  .det-linha{display:flex;align-items:flex-start;gap:12px;padding:12px 22px;border-bottom:1px solid rgba(55,138,221,.06)}
+  .det-linha:last-child{border-bottom:none}
+  .det-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);width:110px;flex-shrink:0;padding-top:2px}
+  .det-valor{flex:1;font-size:13px}
+  .det-valor b{font-family:var(--mono)}
+  .nivel-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase}
+  .nivel-badge.normal{background:rgba(46,204,113,.14);color:var(--ok)}
+  .nivel-badge.atencao{background:rgba(245,166,35,.14);color:var(--warn)}
+  .nivel-badge.critico{background:rgba(255,91,82,.14);color:var(--crit)}
+  .nivel-badge.fora{background:rgba(124,140,160,.18);color:var(--dead)}
+  .vizinhos-lista{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+  .vizinho-item{font-size:12px;color:var(--muted)}
+
+  .empty{text-align:center;padding:50px 20px;color:var(--muted)}
+  .empty b{color:var(--text)}
+
+  .ia-bloco{padding:14px 22px;border-top:1px solid var(--border)}
+  .btn-ia{padding:7px 16px;border-radius:8px;border:1px solid rgba(155,120,255,.4);background:rgba(155,120,255,.08);color:#b9a3ff;font-family:var(--mono);font-size:11px;letter-spacing:.05em;cursor:pointer;transition:all .2s}
+  .btn-ia:hover:not(:disabled){background:rgba(155,120,255,.18);border-color:#b9a3ff}
+  .btn-ia:disabled{opacity:.55;cursor:default}
+  .causa-ia{margin-top:12px;padding:12px 14px;background:rgba(155,120,255,.08);border:1px solid rgba(155,120,255,.25);border-radius:8px;font-size:13px;line-height:1.5;display:none}
+  .causa-disclaimer{display:block;margin-top:8px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .causa-cache-tag{font-size:9.5px;color:var(--muted);margin-left:8px;text-transform:none;letter-spacing:0}
+</style>
+<script src="/static/icons.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <img src="/static/logo.png" alt="CANAÃ" style="height:36px;width:auto;object-fit:contain">
+    <div>
+      <div class="logo-title">CONSULTA DE CLIENTE</div>
+      <div class="logo-sub">DIAGNÓSTICO AUTOMÁTICO DE RECLAMAÇÃO</div>
+    </div>
+  </div>
+  <nav>
+    <a href="/painel" class="nav-btn">PAINEL</a>
+    <a href="/" class="nav-btn">SINAL</a>
+    <a href="/metricas" class="nav-btn">MÉTRICAS</a>
+    <a href="/historico" class="nav-btn">HISTÓRICO</a>
+    <a href="/consulta" class="nav-btn active">CONSULTA</a>
+    <a href="/mapa" class="nav-btn">MAPA</a>
+  </nav>
+</header>
+
+<main>
+  <div class="busca-box">
+    <input type="text" id="buscaInput" class="busca-input" placeholder="Nome, CPF/CNPJ ou SN da ONU..." onkeydown="if(event.key==='Enter')buscar()">
+    <button class="busca-btn" onclick="buscar()"><i data-lucide="search" data-size="14"></i> DIAGNOSTICAR</button>
+  </div>
+  <div class="busca-hint">Roda automaticamente: sinal ao vivo, histórico de degradação (30 dias), porta compartilhada e saúde da OLT. Aceita nome, CPF/CNPJ ou SN da ONU (SN é útil quando o cliente não tem vínculo no cadastro por falha no processo de instalação).</div>
+
+  <div id="resultado">
+    <div class="empty">Digite o nome do cliente acima para começar.</div>
+  </div>
+</main>
+
+<script>
+const NIVEL_LBL = {'Normal':'normal','Atencao':'atencao','Critico':'critico','Fora de Operacao':'fora','Sem leitura':'fora'};
+const NIVEL_TXT = {'Normal':'Normal','Atencao':'Atenção','Critico':'Crítico','Fora de Operacao':'Fora de Operação','Sem leitura':'Sem leitura'};
+const GRAV_ICON = {ok:'check', atencao:'triangle-alert', critico:'octagon-alert'};
+
+function fmtDesde(iso){
+  if(!iso) return '--';
+  const d = new Date(iso.replace(' ','T'));
+  if(isNaN(d)) return '--';
+  const min = Math.floor((Date.now()-d)/60000);
+  if(min < 60)  return `há ${min} min`;
+  const h = Math.floor(min/60);
+  if(h < 24)    return `há ${h}h`;
+  return `há ${Math.floor(h/24)} dia(s)`;
+}
+
+async function buscar(){
+  const termo = document.getElementById('buscaInput').value.trim();
+  const res = document.getElementById('resultado');
+  if(termo.length < 3){
+    res.innerHTML = '<div class="empty">Digite ao menos <b>3 caracteres</b> (nome, CPF/CNPJ ou SN).</div>';
+    return;
+  }
+  res.innerHTML = '<div class="estado"><div class="spinner"></div>Rodando as 4 checagens...</div>';
+  try{
+    const data = await fetch('/api/consulta_cliente?nome=' + encodeURIComponent(termo)).then(r=>r.json());
+    if(data.status !== 'ok') throw new Error(data.mensagem || 'erro');
+    renderResultados(data.resultados || []);
+  }catch(e){
+    res.innerHTML = `<div class="empty" style="color:var(--crit)">Erro: ${e.message}</div>`;
+  }
+}
+
+const RESULTADOS_POR_SN = {};
+
+function renderResultados(lista){
+  const res = document.getElementById('resultado');
+  if(!lista.length){
+    res.innerHTML = '<div class="empty">Nenhum cliente encontrado com esse nome no cadastro ativo.</div>';
+    return;
+  }
+  lista.forEach(r => { RESULTADOS_POR_SN[r.sn] = r; });
+  res.innerHTML = lista.map(renderCard).join('');
+}
+
+function renderCard(r){
+  const nivelCls = NIVEL_LBL[r.nivel_hoje] || 'fora';
+  const nivelTxt = NIVEL_TXT[r.nivel_hoje] || r.nivel_hoje;
+  const rxTxt = (r.rx_hoje != null) ? `${r.rx_hoje.toFixed(2)} dBm` : '--';
+  const cancelado = r.cliente_ativo === false ? '<span class="cancelado">cancelado</span>' : '';
+  const semVinculo = r.sem_vinculo ? '<span class="sem-vinculo">sem vínculo IXC</span>' : '';
+
+  let detalhes = '';
+
+  detalhes += `<div class="det-linha">
+    <div class="det-label">Sinal hoje</div>
+    <div class="det-valor"><b>${rxTxt}</b> · <span class="nivel-badge ${nivelCls}">${nivelTxt}</span> · ${r.status_hoje||'--'} · última mudança ${fmtDesde(r.ultima_mudanca)}</div>
+  </div>`;
+
+  if(r.recorrente){
+    detalhes += `<div class="det-linha">
+      <div class="det-label">Recorrência</div>
+      <div class="det-valor"><b>${r.recorrente.dias_degradado} dia(s)</b> degradado nos últimos 30 dias · pior sinal <b>${r.recorrente.pior_rx} dBm</b> · entre ${r.recorrente.primeira_data} e ${r.recorrente.ultima_data}</div>
+    </div>`;
+  } else {
+    detalhes += `<div class="det-linha">
+      <div class="det-label">Recorrência</div>
+      <div class="det-valor" style="color:var(--muted)">Nenhuma degradação registrada nos últimos 30 dias.</div>
+    </div>`;
+  }
+
+  if(r.piora){
+    detalhes += `<div class="det-linha">
+      <div class="det-label">Maior queda</div>
+      <div class="det-valor">${r.piora.data_anterior} (<b>${r.piora.rx_anterior} dBm</b>) ${lucide('arrow-right',11)} ${r.piora.data_queda} (<b>${r.piora.rx_na_queda} dBm</b>)</div>
+    </div>`;
+  }
+
+  const vizTxt = r.porta_saude.outros_afetados > 0
+    ? `<b>${r.porta_saude.outros_afetados}</b> de ${r.porta_saude.total_onus-1} vizinho(s) também afetado(s) agora`
+    : `Todos os ${r.porta_saude.total_onus-1} vizinhos da porta estão OK`;
+  const vizLista = (r.porta_saude.exemplos||[]).map(v=>`<div class="vizinho-item">${lucide('circle',6)} ${v.cliente||'(sem vínculo)'} · ${v.status}</div>`).join('');
+  detalhes += `<div class="det-linha">
+    <div class="det-label">Porta ${r.pon}</div>
+    <div class="det-valor">${vizTxt}<div class="vizinhos-lista">${vizLista}</div></div>
+  </div>`;
+
+  detalhes += `<div class="det-linha">
+    <div class="det-label">Saúde da OLT</div>
+    <div class="det-valor"><b>${r.olt_name}</b> · <span class="nivel-badge ${r.olt_saude.nivel==='ok'?'normal':r.olt_saude.nivel}">${r.olt_saude.nivel}</span> (${r.olt_saude.pct_offline}% clientes ativos offline)</div>
+  </div>`;
+
+  const endereco = r.endereco ? `<div class="card-endereco">${lucide('map-pin',12)} ${r.endereco}</div>` : '';
+
+  return `
+    <div class="card">
+      <div class="card-topo">
+        <div class="card-nome">${r.cliente_nome}${cancelado}${semVinculo}</div>
+        <div class="card-meta">#${r.cliente_id || '--'} · ${r.sn} · ${r.olt_name} · porta ${r.pon}</div>
+        ${endereco}
+      </div>
+      <div class="veredito ${r.gravidade}">
+        <span class="veredito-icone">${lucide(GRAV_ICON[r.gravidade], 20)}</span>
+        <span class="veredito-texto">${r.veredito}</span>
+      </div>
+      <div class="detalhes">${detalhes}</div>
+      <div class="ia-bloco">
+        <button class="btn-ia" id="btn-causa-${r.sn}" onclick="analisarCausaCliente('${r.sn}')">${lucide('bot',14)} Analisar causa provável</button>
+        <div id="causa-${r.sn}" class="causa-ia"></div>
+      </div>
+    </div>`;
+}
+
+async function analisarCausaCliente(sn){
+  const btn = document.getElementById(`btn-causa-${sn}`);
+  const box = document.getElementById(`causa-${sn}`);
+  const r = RESULTADOS_POR_SN[sn];
+  if(!r){ return; }
+
+  box.style.display = 'block';
+  box.style.color = 'var(--muted)';
+  box.textContent = 'Analisando...';
+  btn.disabled = true;
+
+  try{
+    const resp = await fetch('/api/consulta_cliente/causa_provavel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(r),
+    });
+    const d = await resp.json();
+    if(d.status !== 'ok'){
+      if(resp.status === 429){
+        // outro clique já está em andamento para o mesmo cliente — não é erro, só espera
+        box.style.color = 'var(--warn)';
+        box.textContent = d.mensagem;
+        _reativarBotao(btn, 4);
+        return;
+      }
+      throw new Error(d.mensagem || 'erro');
+    }
+    box.style.color = '';
+    const cacheTag = d.cache ? '<span class="causa-cache-tag">(resposta reaproveitada, mesmo cliente analisado há pouco)</span>' : '';
+    const semDetalhe = d.detalhe_smartolt === false
+      ? `<span class="causa-cache-tag" style="color:var(--warn)">${lucide('triangle-alert',11)} Não foi possível obter o histórico ao vivo da OLT agora (análise parcial, baseada só no sinal e histórico já monitorados). Tente de novo em 1 minuto.</span>`
+      : '';
+    box.innerHTML = `${d.causa}${cacheTag}${semDetalhe}<span class="causa-disclaimer">Sugestão gerada por IA a partir dos dados acima. Revise antes de repassar ao cliente.</span>`;
+  }catch(e){
+    box.style.color = 'var(--crit)';
+    box.textContent = `Erro: ${e.message}`;
+  } finally {
+    // trava para dedo nervoso: mesmo após a resposta, segura um cooldown curto
+    // antes de liberar o botão de novo, pra evitar clique repetido em sequência
+    _reativarBotao(btn, 6);
+  }
+}
+
+function _reativarBotao(btn, segundos){
+  const txtOriginal = `${lucide('bot',14)} Analisar causa provável`;
+  let restante = segundos;
+  btn.textContent = `Aguarde ${restante}s...`;
+  const t = setInterval(() => {
+    restante -= 1;
+    if(restante <= 0){
+      clearInterval(t);
+      btn.disabled = false;
+      btn.textContent = txtOriginal;
+    } else {
+      btn.textContent = `Aguarde ${restante}s...`;
+    }
+  }, 1000);
+}
+</script>
+</body>
+</html>

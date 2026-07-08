@@ -1,14 +1,24 @@
+# Segredos
+.env
+TOKEN API META.txt
+
+# Ambiente Python
 venv/
-.venv/
 __pycache__/
 *.pyc
-.env
-*.env
-!.env.example
+
+# Estado/cache em runtime (regenerado pelo sistema, não é código-fonte)
+cache_onus.json
+saude_estado.json
+synkr_avisos.json
+
+# Logs
 logs/
 *.log
-nohup.out
-cache_onus.json
+
+# Backups de deploy manual (o próprio git substitui essa necessidade)
 *.bak*
-.claude/
-.DS_Store
+
+# Sem permissão de leitura pro usuário canaa (root-only, 700) — adicionar
+# manualmente depois de ajustar a permissão, se quiser versionar a logo.
+dashboard/static/logo.png
