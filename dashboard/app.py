@@ -1962,13 +1962,42 @@ def api_consulta_cliente():
                 if str(v.get("olt_id", "")) == olt_id and str(v.get("board", "")) == board
                 and str(v.get("port", "")) == port and (v.get("sn") or "").upper() != sn
             ]
-            vizinhos_afetados = [v for v in vizinhos if v.get("status") != "Online"]
+
+            def _rx_do_vizinho(v):
+                rx_raw = v.get("signal_1310")
+                try:
+                    return float(rx_raw) if rx_raw not in (None, "", "null") else None
+                except (TypeError, ValueError):
+                    return None
+
+            def _vizinho_com_sinal_degradado(v):
+                # Só conta como evidência de infraestrutura compartilhada
+                # (fibra/splitter) quando o problema é ÓPTICO: LOS (perda
+                # total de sinal) ou, se ainda online, nível Crítico/Fora de
+                # Operação. "Power fail" (energia do vizinho, problema
+                # domiciliar dele) e "Offline" genérico (causa não
+                # identificada) não têm relação com fibra/splitter — contar
+                # isso junto inflava outros_afetados e disparava "provável
+                # problema de infraestrutura compartilhada" mesmo quando os
+                # vizinhos só estavam sem energia (achado do usuário
+                # 2026-08-06, caso RAILA SPINDOLA / contrato 19113: os 4
+                # "afetados" eram todos Power fail, sem relação com a
+                # atenuação real do cliente).
+                status = v.get("status")
+                if status == "LOS":
+                    return True
+                if status == "Online":
+                    return classificar(_rx_do_vizinho(v)) in (NIVEL_CRITICO, NIVEL_FORA)
+                return False
+
+            vizinhos_afetados = [v for v in vizinhos if _vizinho_com_sinal_degradado(v)]
             porta_saude = {
                 "total_onus": len(vizinhos) + 1,
                 "outros_afetados": len(vizinhos_afetados),
                 "exemplos": [
                     {"cliente": (identificar_cliente(v, mac_map, cliente_map) or {}).get("nome", ""),
-                     "status": v.get("status")}
+                     "status": v.get("status"),
+                     "nivel": classificar(_rx_do_vizinho(v)) if v.get("status") == "Online" else None}
                     for v in vizinhos_afetados[:5]
                 ],
             }
