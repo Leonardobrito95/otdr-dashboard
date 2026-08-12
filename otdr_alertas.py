@@ -12,7 +12,7 @@ import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import json
@@ -46,8 +46,7 @@ HEADERS       = {"X-Token": SMARTOLT_KEY}
 # Brasília (achávamos que era UTC, mas em 08/07/2026 confirmamos ao vivo que
 # não é: o SmartOLT mostrava "X min atrás" batendo com o horário local, e o
 # alerta batia com o horário real do evento só depois de subtrairmos 3h a
-# mais por engano). Não converter mais — só normaliza o formato.
-_TZ_BRASILIA = timezone(timedelta(hours=-3))
+# mais por engano). Não converter mais, só normaliza o formato.
 
 def _utc_para_brasilia(ts_str):
     if not ts_str:
@@ -178,19 +177,25 @@ def _registrar_alerta_inicio(olt_id: str, olt_nome: str, porta: dict, inicio: da
     except Exception as e:
         log.error(f"[HISTORICO] Falha ao registrar início ({olt_nome} {porta.get('board')}/{porta.get('port')}): {e}")
 
-def _registrar_alerta_fim(olt_id: str, board: str, porta_num: str) -> None:
+def _registrar_alerta_fim(olt_id: str, board: str, porta_num: str, fim: datetime) -> None:
+    """`fim` vem de datetime.now() do próprio processo Python (mesma fonte que
+    `inicio` em _registrar_alerta_inicio), nunca de now() do SQL. O now() do
+    Postgres depende do timezone configurado na sessão da conexão, que pode
+    divergir do relógio local do processo (foi exatamente isso que gerava
+    duração negativa: fim ficando "antes" do início por causa desse
+    descompasso, não por um erro no dado em si)."""
     try:
         conn = _pg_conectar()
         cur = conn.cursor()
         cur.execute("""
             UPDATE otdr.alertas_historico
-            SET fim = now(), duracao_segundos = EXTRACT(EPOCH FROM (now() - inicio))::int
+            SET fim = %s, duracao_segundos = EXTRACT(EPOCH FROM (%s::timestamp - inicio))::int
             WHERE id = (
                 SELECT id FROM otdr.alertas_historico
                 WHERE olt_id = %s AND board = %s AND porta = %s AND fim IS NULL
                 ORDER BY inicio DESC LIMIT 1
             )
-        """, (olt_id, board, porta_num))
+        """, (fim, fim, olt_id, board, porta_num))
         conn.commit()
         cur.close(); conn.close()
     except Exception as e:
@@ -297,7 +302,19 @@ def _comecou_apos_processo(porta: dict) -> bool:
     (a porta já estava em outage antes do restart), que o aquecimento
     absorve como baseline sem alertar — evita alarme em massa toda vez que o
     serviço reinicia, mas sem esconder uma queda real que aconteceu bem na
-    hora do restart (já vivemos esse caso: CEILANDIA 4/7 em 08/07/2026)."""
+    hora do restart (já vivemos esse caso: CEILANDIA 4/7 em 08/07/2026).
+
+    Achado real 2026-08-12: pra categoria partial_los, o latest_status_change
+    do SmartOLT vem sistematicamente ~30-35min NO FUTURO (confirmado ao vivo
+    em 3 portas diferentes), não é hora de início real. Com isso sempre
+    "parece" ter começado depois do restart, disparando alarme falso em toda
+    outage parcial pré-existente sempre que o serviço reinicia (aconteceu 2x
+    hoje: AGUAS CLARAS-2 13/9 e 3/13 no 1º restart, AGUAS CLARAS-1 6/9 no
+    2º). Sem um jeito confiável de saber se uma outage parcial é nova,
+    assume que não é (absorve como baseline): perder um alerta genuíno bem
+    na janela do restart é bem menos custoso que falso alarme a cada deploy."""
+    if porta.get("categoria") == "partial_los":
+        return False
     ts = porta.get("latest_status_change")
     if not ts:
         return False
@@ -421,9 +438,20 @@ def enviar_alerta(olt_nome: str, porta: dict, chave_synkr: str) -> None:
     onus  = porta.get("total_onus", "?")
     los   = porta.get("los_count", 0)
     pwrf  = porta.get("power_count", 0)
-    causa = CATEGORIA_LABEL.get(porta.get("categoria", ""), "Desconhecida")
-    ts    = _utc_para_brasilia(porta.get("latest_status_change", "—"))
+    categoria = porta.get("categoria", "")
+    causa = CATEGORIA_LABEL.get(categoria, "Desconhecida")
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    # latest_status_change não é confiável pra partial_los (ver
+    # _comecou_apos_processo): mostra a hora real do SmartOLT só pras
+    # categorias onde ela bate (los/offline/power); pra partial_los, um
+    # texto honesto de "detectado agora" em vez de afirmar um horário
+    # errado. Some string não-parseável como "%Y-%m-%d %H:%M:%S" também já
+    # faz o start_dt mais abaixo cair no fallback datetime.now() (mais
+    # correto que usar o horário futuro nesse caso).
+    if categoria == "partial_los":
+        ts = f"detectado nesta varredura, {agora}"
+    else:
+        ts = _utc_para_brasilia(porta.get("latest_status_change", "—"))
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -543,7 +571,8 @@ def enviar_normalizacao_porta(olt_nome: str, chave: str, porta: dict, desde: dat
     pon   = porta.get("port", "?")
     onus  = porta.get("total_onus", "?")
     causa = CATEGORIA_LABEL.get(porta.get("categoria", ""), "Desconhecida")
-    duracao = _dur_texto((datetime.now() - desde).total_seconds())
+    agora = datetime.now()
+    duracao = _dur_texto((agora - desde).total_seconds())
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -620,7 +649,7 @@ def enviar_normalizacao_porta(olt_nome: str, chave: str, porta: dict, desde: dat
         log.error(f"[WHATSAPP] Falha ao enviar normalização ({olt_nome}): {e}")
 
     try:
-        _registrar_alerta_fim(str(porta.get("olt_id", "")), str(board), str(pon))
+        _registrar_alerta_fim(str(porta.get("olt_id", "")), str(board), str(pon), agora)
     except Exception as e:
         log.error(f"[HISTORICO] Falha ao registrar fim ({olt_nome} porta {board}/{pon}): {e}")
 
