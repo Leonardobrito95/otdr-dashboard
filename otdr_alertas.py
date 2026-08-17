@@ -90,6 +90,12 @@ SAUDE_ATENCAO  = float(os.getenv("OTDR_SAUDE_ATENCAO", "10"))            # % off
 SAUDE_CRITICO  = float(os.getenv("OTDR_SAUDE_CRITICO", "18"))            # % offline
 SAUDE_COOLDOWN = int(os.getenv("OTDR_SAUDE_COOLDOWN", "43200"))          # 12h por OLT
 SAUDE_TO       = os.getenv("OTDR_SAUDE_EMAIL", ALERT_TO)                 # equipes técnicas (fallback: Fernando)
+# Limiar pra apontar uma causa dominante no e-mail de saúde (achado real
+# 2026-08-18: OLT TAGUATINGA-N2, 257 de 265 clientes afetados = Power Fail,
+# mas o texto sempre listava as 3 causas como igualmente prováveis mesmo
+# com o breakdown já indicando uma óbvia). Abaixo do limiar, o quadro é
+# misto o bastante pra não arriscar apontar uma causa só.
+SAUDE_CAUSA_DOMINANTE_PCT = float(os.getenv("OTDR_SAUDE_CAUSA_DOMINANTE_PCT", "70"))
 ESCALON_SEC    = int(os.getenv("OTDR_ESCALONAMENTO_HORAS", "24")) * 3600 # persistência p/ escalonar
 ESCALON_EMAIL  = os.getenv("OTDR_ESCALONAMENTO_EMAIL", "")               # liderança (vazio = desligado)
 
@@ -733,6 +739,30 @@ def _html_saude(o: dict, titulo: str, cor: str, intro: str, extra: str = "") -> 
   </td></tr>
 </table></td></tr></table></body></html>"""
 
+def _causa_provavel_saude(o: dict) -> str:
+    """Deriva a causa mais provável do breakdown por categoria que
+    /api/saude_olt já devolve (power_fail/los/offline_puro), em vez de
+    sempre listar energia/backbone/fibra como igualmente prováveis mesmo
+    quando o breakdown já aponta uma dominante clara (ver
+    SAUDE_CAUSA_DOMINANTE_PCT)."""
+    afetados = o.get("offline", 0) or 0
+    if afetados <= 0:
+        return "possível queda de energia na região, backbone ou fibra"
+
+    limiar = afetados * (SAUDE_CAUSA_DOMINANTE_PCT / 100)
+    power = o.get("power_fail", 0) or 0
+    los = o.get("los", 0) or 0
+    offline_puro = o.get("offline_puro", 0) or 0
+
+    if power >= limiar:
+        return f"majoritariamente queda de energia ({power} de {afetados} clientes)"
+    if los >= limiar:
+        return f"majoritariamente perda de sinal, possível rompimento de fibra/backbone ({los} de {afetados} clientes)"
+    if offline_puro >= limiar:
+        return f"majoritariamente offline não identificado ({offline_puro} de {afetados} clientes)"
+    return "causa mista (energia, fibra e offline combinados) — possível queda de energia na região, backbone ou fibra"
+
+
 def _enviar_email(assunto: str, html: str, destino: str) -> None:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = assunto
@@ -784,11 +814,12 @@ def _enviar_whatsapp(parametros: list[str], destino: str = None) -> None:
             log.error(f"[WHATSAPP] Falha ao enviar para {numero}: {detalhe}")
 
 def enviar_alerta_saude(o: dict) -> None:
+    causa = _causa_provavel_saude(o)
     html = _html_saude(
         o, f"🔴 OLT crítica: {o['olt']}", "#b91c1c",
         f"A OLT <strong>{o['olt']}</strong> ultrapassou o limiar crítico de clientes offline "
-        f"(<strong>{o['pct']}%</strong>). Isso indica degradação distribuída. Recomenda-se "
-        f"verificação de campo/NOC (possível queda de energia na região, backbone ou fibra).")
+        f"(<strong>{o['pct']}%</strong>). Isso indica degradação distribuída, {causa}. "
+        f"Recomenda-se verificação de campo/NOC.")
     try:
         _enviar_email(f"🔴 OTDR · OLT crítica: {o['olt']} ({o['pct']}% offline)", html, SAUDE_TO)
         log.info(f"[SAÚDE] Alerta crítico enviado → {SAUDE_TO} | {o['olt']} {o['pct']}%")
