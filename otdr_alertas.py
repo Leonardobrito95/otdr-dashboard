@@ -96,6 +96,16 @@ SAUDE_TO       = os.getenv("OTDR_SAUDE_EMAIL", ALERT_TO)                 # equip
 # com o breakdown já indicando uma óbvia). Abaixo do limiar, o quadro é
 # misto o bastante pra não arriscar apontar uma causa só.
 SAUDE_CAUSA_DOMINANTE_PCT = float(os.getenv("OTDR_SAUDE_CAUSA_DOMINANTE_PCT", "70"))
+# Achado real (18/08): uma queda de energia breve/pequena se resolve sozinha
+# quando a concessionária restabelece — não vale incomodar o cliente final
+# com um aviso pra isso (o time nem chega a agir). Só notifica o cliente
+# sobre queda de energia quando o % de offline da OLT (o['pct'], mesmo
+# campo do limite crítico interno em SAUDE_CRITICO) passar deste limite bem
+# mais alto — tipicamente o caso de uma queda de energia no POP/ativo de
+# rede em si, não em algumas casas isoladas. Alerta interno ao NOC continua
+# disparando normalmente em SAUDE_CRITICO, só o aviso ao CLIENTE é que fica
+# mais exigente.
+SAUDE_CLIENTE_ENERGIA_PCT = float(os.getenv("OTDR_SAUDE_CLIENTE_ENERGIA_PCT", "40"))
 ESCALON_SEC    = int(os.getenv("OTDR_ESCALONAMENTO_HORAS", "24")) * 3600 # persistência p/ escalonar
 ESCALON_EMAIL  = os.getenv("OTDR_ESCALONAMENTO_EMAIL", "")               # liderança (vazio = desligado)
 
@@ -750,6 +760,16 @@ def _html_saude(o: dict, titulo: str, cor: str, intro: str, extra: str = "") -> 
   </td></tr>
 </table></td></tr></table></body></html>"""
 
+def _energia_e_causa_dominante(o: dict) -> bool:
+    """True quando power_fail responde por SAUDE_CAUSA_DOMINANTE_PCT ou mais
+    dos clientes afetados dessa OLT — usada tanto pro texto (interno e do
+    cliente) quanto pra decidir SE avisa o cliente final (ver
+    SAUDE_CLIENTE_ENERGIA_PCT)."""
+    afetados = o.get("offline", 0) or 0
+    power = o.get("power_fail", 0) or 0
+    return afetados > 0 and power >= afetados * (SAUDE_CAUSA_DOMINANTE_PCT / 100)
+
+
 def _causa_provavel_saude(o: dict) -> str:
     """Deriva a causa mais provável do breakdown por categoria que
     /api/saude_olt já devolve (power_fail/los/offline_puro), em vez de
@@ -760,13 +780,13 @@ def _causa_provavel_saude(o: dict) -> str:
     if afetados <= 0:
         return "possível queda de energia na região, backbone ou fibra"
 
+    if _energia_e_causa_dominante(o):
+        return f"majoritariamente queda de energia ({o.get('power_fail', 0)} de {afetados} clientes)"
+
     limiar = afetados * (SAUDE_CAUSA_DOMINANTE_PCT / 100)
-    power = o.get("power_fail", 0) or 0
     los = o.get("los", 0) or 0
     offline_puro = o.get("offline_puro", 0) or 0
 
-    if power >= limiar:
-        return f"majoritariamente queda de energia ({power} de {afetados} clientes)"
     if los >= limiar:
         return f"majoritariamente perda de sinal, possível rompimento de fibra/backbone ({los} de {afetados} clientes)"
     if offline_puro >= limiar:
@@ -781,14 +801,24 @@ def _texto_cliente_saude(o: dict) -> str:
     quando a concessionária restabelece, sem intervenção de campo (achado
     real 2026-08-18: cliente reclamou que o texto genérico prometia uma
     equipe que nunca atuou num caso que era só oscilação de energia)."""
-    afetados = o.get("offline", 0) or 0
-    power = o.get("power_fail", 0) or 0
-    if afetados > 0 and power >= afetados * (SAUDE_CAUSA_DOMINANTE_PCT / 100):
+    if _energia_e_causa_dominante(o):
         return ("Identificamos uma instabilidade causada por oscilação de energia na região. "
                 "A conexão deve normalizar automaticamente assim que a energia for restabelecida. "
                 "Pedimos desculpas pelo transtorno.")
     return ("Identificamos uma instabilidade que pode afetar sua conexão. Nossa equipe já está "
             "trabalhando na normalização. Pedimos desculpas pelo transtorno.")
+
+
+def _deve_avisar_cliente_saude(o: dict) -> bool:
+    """Só incomoda o cliente final com uma queda de energia quando ela é
+    realmente massiva (% de offline da OLT >= SAUDE_CLIENTE_ENERGIA_PCT,
+    tipicamente energia no próprio POP/ativo de rede) — uma queda pequena/
+    breve se resolve sozinha antes de qualquer intervenção, avisar só cria
+    alarde à toa. Causas que não são energia continuam avisando sempre
+    (ali a equipe de fato investiga/atua)."""
+    if not _energia_e_causa_dominante(o):
+        return True
+    return (o.get("pct", 0) or 0) >= SAUDE_CLIENTE_ENERGIA_PCT
 
 
 def _enviar_email(assunto: str, html: str, destino: str) -> None:
@@ -864,17 +894,25 @@ def enviar_alerta_saude(o: dict) -> None:
     except Exception as e:
         log.error(f"[WHATSAPP] Falha ao enviar alerta de saúde ({o['olt']}): {e}")
 
-    # Aviso de parada para o call center (Aprimorar/SYNKR).
-    try:
-        _synkr_criar_aviso(
-            f"saude:{o['olt']}",
-            description=f"OLT {o['olt']} em estado crítico: {o['pct']}% dos clientes ativos offline.",
-            impact=f"Aproximadamente {o['offline']} cliente(s) na região atendida pela OLT {o['olt']}.",
-            text_for_client=_texto_cliente_saude(o),
-            start_dt=datetime.now(),
-        )
-    except Exception as e:
-        log.error(f"[SYNKR] Falha ao processar aviso de saúde ({o['olt']}): {e}")
+    # Aviso de parada para o call center (Aprimorar/SYNKR) — o único canal
+    # que o cliente final vê. Pulado quando a causa é energia e não é
+    # massiva o bastante (ver _deve_avisar_cliente_saude): e-mail/WhatsApp
+    # acima já avisaram o NOC normalmente, só o cliente não é incomodado
+    # com algo que se resolve sozinho.
+    if _deve_avisar_cliente_saude(o):
+        try:
+            _synkr_criar_aviso(
+                f"saude:{o['olt']}",
+                description=f"OLT {o['olt']} em estado crítico: {o['pct']}% dos clientes ativos offline.",
+                impact=f"Aproximadamente {o['offline']} cliente(s) na região atendida pela OLT {o['olt']}.",
+                text_for_client=_texto_cliente_saude(o),
+                start_dt=datetime.now(),
+            )
+        except Exception as e:
+            log.error(f"[SYNKR] Falha ao processar aviso de saúde ({o['olt']}): {e}")
+    else:
+        log.info(f"[SAÚDE] Cliente não avisado (queda de energia {o['pct']}% < limite de "
+                  f"{SAUDE_CLIENTE_ENERGIA_PCT:.0f}% pra aviso ao cliente) — {o['olt']}")
 
 def enviar_normalizacao(o: dict) -> None:
     html = _html_saude(
