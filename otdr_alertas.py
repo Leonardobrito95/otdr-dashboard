@@ -548,12 +548,23 @@ def enviar_alerta(olt_nome: str, porta: dict, chave_synkr: str) -> None:
             start_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
         except (ValueError, TypeError):
             start_dt = datetime.now()
+        # Achado real (18/08): pra queda de energia, ninguem da equipe atua de
+        # verdade — a conexao volta sozinha quando a concessionaria
+        # restabelece. Prometer "equipe ja atuando" pro cliente nesse caso e
+        # falso; usa a categoria (ja vem direto do SmartOLT) pra escolher o
+        # texto certo.
+        if categoria == "power":
+            texto_cliente = ("Identificamos uma instabilidade causada por oscilação de energia na região. "
+                              "A conexão deve normalizar automaticamente assim que a energia for "
+                              "restabelecida. Pedimos desculpas pelo transtorno.")
+        else:
+            texto_cliente = ("Identificamos uma instabilidade na conexão da sua região. Nossa equipe técnica já "
+                              "está atuando na correção. Pedimos desculpas pelo transtorno.")
         _synkr_criar_aviso(
             chave_synkr,
             description=f"Queda detectada na OLT {olt_nome}, porta {board}/{pon}. Causa: {causa}. {onus} ONUs na porta.",
             impact=f"Aproximadamente {onus} cliente(s) na porta {board}/{pon} da OLT {olt_nome}.",
-            text_for_client="Identificamos uma instabilidade na conexão da sua região. Nossa equipe técnica já "
-                             "está atuando na correção. Pedimos desculpas pelo transtorno.",
+            text_for_client=texto_cliente,
             start_dt=start_dt,
         )
     except Exception as e:
@@ -735,7 +746,7 @@ def _html_saude(o: dict, titulo: str, cor: str, intro: str, extra: str = "") -> 
           <td style="padding:9px 14px;font-weight:bold;">{o['los']}</td></tr>
     </table>
     {extra}
-    <p style="margin:20px 0 0;font-size:11px;color:#9ca3af;">Saúde por OLT · limiar crítico ≥ {SAUDE_CRITICO:.0f}% · verificação automática.</p>
+    <p style="margin:20px 0 0;font-size:11px;color:#9ca3af;">Saúde por OLT · limite crítico ≥ {SAUDE_CRITICO:.0f}% · verificação automática.</p>
   </td></tr>
 </table></td></tr></table></body></html>"""
 
@@ -761,6 +772,23 @@ def _causa_provavel_saude(o: dict) -> str:
     if offline_puro >= limiar:
         return f"majoritariamente offline não identificado ({offline_puro} de {afetados} clientes)"
     return "causa mista (energia, fibra e offline combinados) — possível queda de energia na região, backbone ou fibra"
+
+
+def _texto_cliente_saude(o: dict) -> str:
+    """Mesma lógica de _causa_provavel_saude, mas pro texto do cliente final
+    (SYNKR/Aprimorar): quando a causa dominante é queda de energia, não
+    promete uma equipe atuando que não existe — energia se resolve sozinha
+    quando a concessionária restabelece, sem intervenção de campo (achado
+    real 2026-08-18: cliente reclamou que o texto genérico prometia uma
+    equipe que nunca atuou num caso que era só oscilação de energia)."""
+    afetados = o.get("offline", 0) or 0
+    power = o.get("power_fail", 0) or 0
+    if afetados > 0 and power >= afetados * (SAUDE_CAUSA_DOMINANTE_PCT / 100):
+        return ("Identificamos uma instabilidade causada por oscilação de energia na região. "
+                "A conexão deve normalizar automaticamente assim que a energia for restabelecida. "
+                "Pedimos desculpas pelo transtorno.")
+    return ("Identificamos uma instabilidade que pode afetar sua conexão. Nossa equipe já está "
+            "trabalhando na normalização. Pedimos desculpas pelo transtorno.")
 
 
 def _enviar_email(assunto: str, html: str, destino: str) -> None:
@@ -817,7 +845,7 @@ def enviar_alerta_saude(o: dict) -> None:
     causa = _causa_provavel_saude(o)
     html = _html_saude(
         o, f"🔴 OLT crítica: {o['olt']}", "#b91c1c",
-        f"A OLT <strong>{o['olt']}</strong> ultrapassou o limiar crítico de clientes offline "
+        f"A OLT <strong>{o['olt']}</strong> ultrapassou o limite crítico de clientes offline "
         f"(<strong>{o['pct']}%</strong>). Isso indica degradação distribuída, {causa}. "
         f"Recomenda-se verificação de campo/NOC.")
     try:
@@ -842,8 +870,7 @@ def enviar_alerta_saude(o: dict) -> None:
             f"saude:{o['olt']}",
             description=f"OLT {o['olt']} em estado crítico: {o['pct']}% dos clientes ativos offline.",
             impact=f"Aproximadamente {o['offline']} cliente(s) na região atendida pela OLT {o['olt']}.",
-            text_for_client="Identificamos uma instabilidade que pode afetar sua conexão. Nossa equipe já está "
-                             "trabalhando na normalização. Pedimos desculpas pelo transtorno.",
+            text_for_client=_texto_cliente_saude(o),
             start_dt=datetime.now(),
         )
     except Exception as e:
@@ -853,7 +880,7 @@ def enviar_normalizacao(o: dict) -> None:
     html = _html_saude(
         o, f"✅ OLT normalizada: {o['olt']}", "#15803d",
         f"A OLT <strong>{o['olt']}</strong> voltou a operar dentro do normal "
-        f"(<strong>{o['pct']}%</strong> de clientes offline, abaixo do limiar crítico de {SAUDE_CRITICO:.0f}%).")
+        f"(<strong>{o['pct']}%</strong> de clientes offline, abaixo do limite crítico de {SAUDE_CRITICO:.0f}%).")
     try:
         _enviar_email(f"✅ OTDR · OLT normalizada: {o['olt']}", html, SAUDE_TO)
         log.info(f"[SAÚDE] Normalização enviada → {SAUDE_TO} | {o['olt']} {o['pct']}%")
@@ -864,7 +891,7 @@ def enviar_normalizacao(o: dict) -> None:
     try:
         _enviar_whatsapp([
             f"OLT normalizada: {o['olt']}",
-            f"{o['pct']}% offline, abaixo do limiar crítico de {SAUDE_CRITICO:.0f}%",
+            f"{o['pct']}% offline, abaixo do limite crítico de {SAUDE_CRITICO:.0f}%",
             "Sem ação necessária.",
         ])
     except Exception as e:
@@ -872,7 +899,7 @@ def enviar_normalizacao(o: dict) -> None:
 
     try:
         _synkr_fechar_aviso(f"saude:{o['olt']}",
-                             report=f"OLT {o['olt']} normalizada ({o['pct']}% offline, abaixo do limiar crítico).")
+                             report=f"OLT {o['olt']} normalizada ({o['pct']}% offline, abaixo do limite crítico).")
     except Exception as e:
         log.error(f"[SYNKR] Falha ao encerrar aviso de saúde ({o['olt']}): {e}")
 
