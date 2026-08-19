@@ -31,4 +31,18 @@ Três processos de coleta e um dashboard Flask:
 | Alertas | SMTP (e-mail interno) e SYNKR (aviso ao cliente final) |
 | Execução | systemd (serviço contínuo de detecção + snapshots diários agendados) |
 
+## Rodando localmente
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # preencha SmartOLT, IXC (MySQL), Postgres, SMTP e demais chaves
+python otdr_snapshot.py       # snapshot inicial: IXC -> Postgres
+python otdr_smartolt.py       # snapshot inicial: SmartOLT -> Postgres
+python otdr_alertas.py        # detector de queda em tempo real (loop contínuo)
+python dashboard/app.py       # painel web, http://localhost:5008
+```
+
+Em produção, cada processo roda como serviço systemd independente — `otdr_alertas.py` contínuo, os dois snapshots agendados diariamente.
+
 <sub>Sistema interno de uma ISP regional. Credenciais e dados reais foram removidos desta versão de portfólio.</sub>
