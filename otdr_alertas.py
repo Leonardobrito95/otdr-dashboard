@@ -20,6 +20,8 @@ import requests
 import psycopg2
 from dotenv import load_dotenv
 
+from servicos_externos import sincronizar_avisos
+
 # ── Paths ─────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
 LOG_FILE = BASE_DIR / "logs" / "otdr_alertas.log"
@@ -1166,6 +1168,11 @@ def main() -> None:
             verificar_saude()
         except Exception as e:
             log.error(f"Erro no ciclo de saúde: {e}")
+
+        try:
+            sincronizar_avisos(PG_CONFIG, _synkr_criar_aviso, _synkr_fechar_aviso)
+        except Exception as e:
+            log.error(f"Erro no ciclo de serviços externos: {e}")
 
         time.sleep(POLL_INTERVAL)
 
