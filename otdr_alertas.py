@@ -874,6 +874,18 @@ def _enviar_whatsapp(parametros: list[str], destino: str = None) -> None:
             log.error(f"[WHATSAPP] Falha ao enviar para {numero}: {detalhe}")
 
 def enviar_alerta_saude(o: dict) -> None:
+    # Achado real (31/08, pedido da equipe de Redes/CGR no WhatsApp): queda de
+    # energia é externa (concessionária), não acionável por campo/NOC, e se
+    # resolve sozinha, mandar "recomenda-se verificação de campo/NOC" nesse
+    # caso é alarme falso pra quem recebe. Mesma lógica já usada pra decidir
+    # se avisa o CLIENTE final (_deve_avisar_cliente_saude), agora aplicada
+    # também ao alerta interno (e-mail + WhatsApp): dominante em energia,
+    # não dispara. Fica só o log, pra não sumir do rastro sem deixar vestígio.
+    if _energia_e_causa_dominante(o):
+        log.info(f"[SAÚDE] {o['olt']} crítica ({o['pct']}%) mas causa dominante é queda de energia "
+                  f"({o.get('power_fail', 0)} de {o.get('offline', 0)} clientes), alerta suprimido.")
+        return
+
     causa = _causa_provavel_saude(o)
     html = _html_saude(
         o, f"🔴 OLT crítica: {o['olt']}", "#b91c1c",
