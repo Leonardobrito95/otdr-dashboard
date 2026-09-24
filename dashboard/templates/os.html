@@ -556,7 +556,7 @@ async function carregarSinal(live=false){
   const btn = document.getElementById('btnRefreshModal');
   if(btn) btn.disabled = true;
   document.getElementById('modalTbody').innerHTML = renderSkeleton();
-  document.getElementById('modalFooter').textContent = live ? 'Consultando SmartOLT ao vivo...' : 'Carregando...';
+  document.getElementById('modalFooter').textContent = live ? 'Consultando OLT Cloud ao vivo...' : 'Carregando...';
 
   const controller = new AbortController();
   const timeout = setTimeout(()=>controller.abort(), 15000);
@@ -573,7 +573,7 @@ async function carregarSinal(live=false){
       document.getElementById('modalTbody').innerHTML =
         `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;line-height:2">
           Nenhuma ONU encontrada para este cliente.<br>
-          <span style="font-size:10px;opacity:0.6">MAC pode não estar cadastrado no IXC ou SmartOLT.</span>
+          <span style="font-size:10px;opacity:0.6">MAC pode não estar cadastrado no IXC ou OLT Cloud.</span>
         </td></tr>`;
     } else {
       document.getElementById('modalTbody').innerHTML = onus.map(o=>{
@@ -596,16 +596,16 @@ async function carregarSinal(live=false){
     const ts = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     document.getElementById('modalFooter').textContent =
       onus.length + (onus.length===1?' ONU encontrada':' ONUs encontradas') +
-      (live ? ' · atualizado ao vivo ' : ' · cache SmartOLT ~5min · ') + ts;
+      (live ? ' · atualizado ao vivo ' : ' · cache OLT Cloud ~1min · ') + ts;
   } catch(e){
     clearTimeout(timeout);
     const msg = e.name==='AbortError'
-      ? 'Timeout: SmartOLT não respondeu em 15s. Tente novamente.'
+      ? 'Timeout: OLT Cloud não respondeu em 15s. Tente novamente.'
       : 'Erro: ' + e.message;
     document.getElementById('modalTbody').innerHTML =
       `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--crit);font-family:var(--mono);font-size:11px;line-height:2">
         ${lucide('triangle-alert',12)} ${msg}<br>
-        <span style="font-size:10px;opacity:0.6">Verifique a conectividade com a SmartOLT.</span>
+        <span style="font-size:10px;opacity:0.6">Verifique a conectividade com o OLT Cloud.</span>
       </td></tr>`;
     document.getElementById('modalFooter').textContent = 'Falha ao carregar';
   } finally {
@@ -617,7 +617,7 @@ function verSinal(clienteId, nome){
   _modalClienteId = clienteId;
   _modalNome = nome;
   document.getElementById('modalTitle').textContent = 'SINAL — ' + (nome||'#'+clienteId).toUpperCase();
-  document.getElementById('modalSubtitle').textContent = 'ID Cliente: ' + clienteId + ' · SmartOLT tempo real';
+  document.getElementById('modalSubtitle').textContent = 'ID Cliente: ' + clienteId + ' · OLT Cloud tempo real';
   document.getElementById('modalOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
   carregarSinal(false);
@@ -641,7 +641,7 @@ init();
   <div class="modal">
     <div class="modal-header">
       <div>
-        <div class="modal-title" id="modalTitle">SINAL — SMARTOLT</div>
+        <div class="modal-title" id="modalTitle">SINAL — OLT CLOUD</div>
         <div class="modal-subtitle" id="modalSubtitle"></div>
       </div>
       <button class="modal-close" onclick="fecharModal()"><i data-lucide="x" data-size="14"></i></button>
@@ -660,7 +660,7 @@ init();
     </div>
     <div class="modal-footer">
       <span class="modal-footer-info" id="modalFooter"></span>
-      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta à SmartOLT ignorando o cache"><i data-lucide="rotate-cw" data-size="12"></i> AO VIVO</button>
+      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta ao OLT Cloud ignorando o cache"><i data-lucide="rotate-cw" data-size="12"></i> AO VIVO</button>
     </div>
   </div>
 </div>

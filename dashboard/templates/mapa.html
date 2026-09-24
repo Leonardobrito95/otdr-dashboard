@@ -260,7 +260,7 @@
   <div class="modal">
     <div class="modal-header">
       <div>
-        <div class="modal-title" id="modalTitle">SINAL — SMARTOLT</div>
+        <div class="modal-title" id="modalTitle">SINAL — OLT CLOUD</div>
         <div class="modal-subtitle" id="modalSubtitle"></div>
       </div>
       <button class="modal-close" onclick="fecharModal()"><i data-lucide="x" data-size="14"></i></button>
@@ -278,7 +278,7 @@
     </div>
     <div class="modal-footer">
       <span class="modal-footer-info" id="modalFooter"></span>
-      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta à SmartOLT ignorando o cache"><i data-lucide="rotate-cw" data-size="12"></i> AO VIVO</button>
+      <button class="btn-refresh-modal" id="btnRefreshModal" onclick="refreshModal()" title="Força nova consulta ao OLT Cloud ignorando o cache"><i data-lucide="rotate-cw" data-size="12"></i> AO VIVO</button>
     </div>
   </div>
 </div>
@@ -477,15 +477,15 @@ async function carregarMapa(live=false) {
       const el = document.getElementById('mapaErro');
       el.innerHTML = `<div style="text-align:center;padding:32px;max-width:340px">
         <div style="font-size:36px;margin-bottom:14px;display:flex;justify-content:center">${lucide('hourglass',36)}</div>
-        <div style="font-family:var(--mono);font-size:13px;color:var(--warn);font-weight:700;margin-bottom:10px;letter-spacing:0.08em">RATE LIMIT — SMARTOLT</div>
+        <div style="font-family:var(--mono);font-size:13px;color:var(--warn);font-weight:700;margin-bottom:10px;letter-spacing:0.08em">RATE LIMIT — OLT CLOUD</div>
         <div style="font-size:12px;color:var(--muted);line-height:1.8">
-          A API da SmartOLT limita consultas por hora.<br>
+          A API do OLT Cloud limita consultas por hora.<br>
           Aguarde até <strong style="color:var(--text);font-size:14px">${resetStr}</strong><br>e clique em <strong style="color:var(--accent)">Atualizar Mapa</strong>.
         </div>
       </div>`;
       el.style.display = 'flex';
       document.getElementById('statusBar').textContent =
-        `⚠ Rate limit SmartOLT — disponível após ${resetStr}`;
+        `⚠ Rate limit OLT Cloud — disponível após ${resetStr}`;
       throw new Error('rate_limit_handled');
     }
     if (data.status !== 'ok') throw new Error(data.mensagem || 'Erro desconhecido');
@@ -573,7 +573,7 @@ async function carregarSinal(live=false){
   if(!_modalClienteId) return;
   document.getElementById('btnRefreshModal').disabled = true;
   document.getElementById('modalTbody').innerHTML = renderSkeleton();
-  document.getElementById('modalFooter').textContent = live ? 'Consultando SmartOLT ao vivo...' : 'Carregando...';
+  document.getElementById('modalFooter').textContent = live ? 'Consultando OLT Cloud ao vivo...' : 'Carregando...';
   const ctrl = new AbortController();
   const tid   = setTimeout(()=>ctrl.abort(), 15000);
   try {
@@ -609,10 +609,10 @@ async function carregarSinal(live=false){
       }).join('');
     }
     document.getElementById('modalFooter').textContent =
-      `${onus.length} ONU(s) · ${live?'SmartOLT ao vivo':'cache'} · ${new Date().toLocaleTimeString('pt-BR')}`;
+      `${onus.length} ONU(s) · ${live?'OLT Cloud ao vivo':'cache'} · ${new Date().toLocaleTimeString('pt-BR')}`;
   } catch(err){
     clearTimeout(tid);
-    const msg = err.name==='AbortError' ? 'Tempo esgotado (15s) — SmartOLT sem resposta' : `Erro: ${err.message}`;
+    const msg = err.name==='AbortError' ? 'Tempo esgotado (15s) — OLT Cloud sem resposta' : `Erro: ${err.message}`;
     document.getElementById('modalTbody').innerHTML =
       `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--crit);font-family:var(--mono);font-size:11px">${msg}</td></tr>`;
     document.getElementById('modalFooter').textContent = 'Falha ao carregar';
@@ -625,7 +625,7 @@ function verSinal(clienteId, nome){
   _modalClienteId = clienteId;
   _modalNome = nome;
   document.getElementById('modalTitle').textContent = 'SINAL — ' + (nome||'#'+clienteId).toUpperCase();
-  document.getElementById('modalSubtitle').textContent = 'ID Cliente: ' + clienteId + ' · SmartOLT tempo real';
+  document.getElementById('modalSubtitle').textContent = 'ID Cliente: ' + clienteId + ' · OLT Cloud tempo real';
   document.getElementById('modalOverlay').classList.add('open');
   document.addEventListener('keydown', _escHandler);
   carregarSinal(false);

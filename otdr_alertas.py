@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 OTDR Alertas — Detector de queda em tempo real
-Consulta SmartOLT (get_outage_pons) a cada 7 min.
+Consulta o OLT Cloud (quedas de PON a partir do status das ONUs) a cada 7 min.
 Envia email ao detectar nova outage em porta PON.
 """
 
@@ -21,6 +21,7 @@ import psycopg2
 from dotenv import load_dotenv
 
 from servicos_externos import sincronizar_avisos
+from oltcloud import OltCloud, outage_pons
 
 # ── Paths ─────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
@@ -40,15 +41,19 @@ log = logging.getLogger(__name__)
 # ── Config ────────────────────────────────────────────────────
 load_dotenv(BASE_DIR / ".env")
 
-SMARTOLT_URL  = os.getenv("SMARTOLT_URL", "").rstrip("/")
-SMARTOLT_KEY  = os.getenv("SMARTOLT_KEY", "")
-HEADERS       = {"X-Token": SMARTOLT_KEY}
+# Fonte de status das ONUs: OLT Cloud (o SmartOLT foi descontinuado em
+# 2026-09). O cliente é criado na primeira consulta, depois do load_dotenv.
+_oltcloud: OltCloud | None = None
 
-# "latest_status_change" da API get_outage_pons já vem em horário local de
-# Brasília (achávamos que era UTC, mas em 08/07/2026 confirmamos ao vivo que
-# não é: o SmartOLT mostrava "X min atrás" batendo com o horário local, e o
-# alerta batia com o horário real do evento só depois de subtrairmos 3h a
-# mais por engano). Não converter mais, só normaliza o formato.
+def _cliente_oltcloud() -> OltCloud:
+    global _oltcloud
+    if _oltcloud is None:
+        _oltcloud = OltCloud()
+    return _oltcloud
+
+# "latest_status_change" das portas em queda vem em horário local de Brasília,
+# como vinha no SmartOLT (confirmado ao vivo em 08/07/2026) e como o OLT Cloud
+# também entrega (conferido no painel em 24/09/2026). Só normaliza o formato.
 
 def _utc_para_brasilia(ts_str):
     if not ts_str:
@@ -232,10 +237,11 @@ _saude_estado: dict = {}
 _synkr_avisos: dict[str, int] = {}
 
 
-# ── SmartOLT API ──────────────────────────────────────────────
-# Categoria = a seção do get_outage_pons onde a porta apareceu (é isso que
-# distingue LOS parcial de LOS total, power fail e offline — o próprio
-# SmartOLT já faz essa classificação, só precisamos ler certo).
+# ── Quedas de PON (OLT Cloud) ─────────────────────────────────
+# Categoria = partial_los | los | power | offline, a mesma classificação que o
+# get_outage_pons do SmartOLT fazia. O OLT Cloud não tem uma rota equivalente:
+# oltcloud.calcular_outages() refaz a classificação a partir do status de cada
+# ONU, com as regras calibradas contra o SmartOLT (ver oltcloud.py).
 CATEGORIA_LABEL = {
     "partial_los": "LOS parcial (parte dos clientes da porta)",
     "los":         "LOS total (porta inteira sem sinal, provável fibra cortada)",
@@ -244,24 +250,11 @@ CATEGORIA_LABEL = {
 }
 
 def get_outage_pons() -> list[dict]:
-    """Consulta única e global: todas as portas em outage de todas as OLTs,
-    já categorizadas pelo próprio SmartOLT. Resposta real da API:
-    {"response": {"sections": [{"key": "partial_los"|"los"|"power"|"offline",
-    "groups": [{"pons": [ {board, port, olt_id, olt_name, los_count, ...} ]}]}]}}
-    """
-    resp = requests.get(f"{SMARTOLT_URL}/api/system/get_outage_pons/", headers=HEADERS, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-    sections = (data.get("response") or {}).get("sections", [])
-    portas = []
-    for sec in sections:
-        categoria = sec.get("key", "")
-        for grupo in sec.get("groups", []):
-            for p in grupo.get("pons", []):
-                p = dict(p)
-                p["categoria"] = categoria
-                portas.append(p)
-    return portas
+    """Consulta global: todas as portas em queda de todas as OLTs, cada uma com
+    board, port, olt_id, olt_name, total_onus, affected_onus, affected_percent,
+    los_count, power_count, latest_status_change e categoria. ~5 requisições
+    por ciclo (só as ONUs fora do ar + o total de ONUs por PON)."""
+    return outage_pons(_cliente_oltcloud())
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -289,8 +282,8 @@ def _qtd_afetados(porta: dict) -> int:
 def _deve_alertar(porta: dict) -> bool:
     """Critério combinado: alerta se a quantidade absoluta de clientes
     afetados OU o percentual da porta ultrapassar o limiar.
-    O percentual só é um sinal real em outages PARCIAIS (partial_los), onde o
-    SmartOLT calcula de fato quantos clientes caíram dentro da porta. Em
+    O percentual só é um sinal real em outages PARCIAIS (partial_los), onde a
+    classificação calcula de fato quantos clientes caíram juntos na porta. Em
     outages TOTAIS (los/offline) o percentual é sempre 100% por definição
     (a porta inteira caiu) e não discrimina nada, então nesses casos só a
     quantidade absoluta decide.
@@ -315,7 +308,7 @@ def _deve_alertar(porta: dict) -> bool:
 
 def _comecou_apos_processo(porta: dict) -> bool:
     """Só relevante durante o aquecimento (1º ciclo após reiniciar o serviço):
-    uma porta nova só é candidata a alerta se o próprio SmartOLT reportar que
+    uma porta nova só é candidata a alerta se a fonte de status reportar que
     ela começou DEPOIS do processo ter subido. Senão é estado pré-existente
     (a porta já estava em outage antes do restart), que o aquecimento
     absorve como baseline sem alertar — evita alarme em massa toda vez que o
@@ -460,7 +453,8 @@ def enviar_alerta(olt_nome: str, porta: dict, chave_synkr: str) -> None:
     causa = CATEGORIA_LABEL.get(categoria, "Desconhecida")
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
     # latest_status_change não é confiável pra partial_los (ver
-    # _comecou_apos_processo): mostra a hora real do SmartOLT só pras
+    # _comecou_apos_processo; vinha ~30 min no futuro do SmartOLT, no OLT
+    # Cloud é o início real do grupo, mas o texto conservador ficou): mostra a hora só pras
     # categorias onde ela bate (los/offline/power); pra partial_los, um
     # texto honesto de "detectado agora" em vez de afirmar um horário
     # errado. Some string não-parseável como "%Y-%m-%d %H:%M:%S" também já
@@ -563,7 +557,7 @@ def enviar_alerta(olt_nome: str, porta: dict, chave_synkr: str) -> None:
         # Achado real (18/08): pra queda de energia, ninguem da equipe atua de
         # verdade — a conexao volta sozinha quando a concessionaria
         # restabelece. Prometer "equipe ja atuando" pro cliente nesse caso e
-        # falso; usa a categoria (ja vem direto do SmartOLT) pra escolher o
+        # falso; usa a categoria (vem de oltcloud.calcular_outages) pra escolher o
         # texto certo.
         if categoria == "power":
             texto_cliente = ("Identificamos uma instabilidade causada por oscilação de energia na região. "
@@ -1036,7 +1030,7 @@ def verificar() -> None:
     try:
         portas_todas = get_outage_pons()
     except Exception as e:
-        log.warning(f"Erro ao consultar get_outage_pons: {e}")
+        log.warning(f"Erro ao consultar quedas de PON no OLT Cloud: {e}")
         return
 
     label = " [aquecimento]" if _aquecendo else ""
@@ -1152,8 +1146,8 @@ def verificar() -> None:
 
 # ── Entry point ───────────────────────────────────────────────
 def main() -> None:
-    if not SMARTOLT_KEY:
-        log.error("SMARTOLT_KEY não configurada em .env — abortando.")
+    if not _cliente_oltcloud().configurado():
+        log.error("OLTCLOUD_URL/OLTCLOUD_USER/OLTCLOUD_PASSWORD não configurados em .env — abortando.")
         sys.exit(1)
 
     global _saude_estado, _synkr_avisos
@@ -1161,7 +1155,7 @@ def main() -> None:
     _synkr_avisos  = _carregar_synkr_avisos()
     _garantir_tabela_historico()
 
-    log.info(f"OTDR Alertas iniciado | URL: {SMARTOLT_URL}")
+    log.info(f"OTDR Alertas iniciado | OLT Cloud: {_cliente_oltcloud().url}")
     log.info(f"Outage de porta → {ALERT_TO} (intervalo {POLL_INTERVAL}s, cooldown {COOLDOWN_SEC}s)")
     log.info(f"Saúde crítica (≥{SAUDE_CRITICO:.0f}%) → {SAUDE_TO} (cooldown {SAUDE_COOLDOWN//3600}h)" +
              (f" | escalona → {ESCALON_EMAIL} após {ESCALON_SEC//3600}h" if ESCALON_EMAIL else " | escalonamento desligado"))

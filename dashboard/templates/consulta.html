@@ -259,7 +259,7 @@ async function analisarCausaCliente(sn){
     }
     box.style.color = '';
     const cacheTag = d.cache ? '<span class="causa-cache-tag">(resposta reaproveitada, mesmo cliente analisado há pouco)</span>' : '';
-    const semDetalhe = d.detalhe_smartolt === false
+    const semDetalhe = d.detalhe_olt === false
       ? `<span class="causa-cache-tag" style="color:var(--warn)">${lucide('triangle-alert',11)} Não foi possível obter o histórico ao vivo da OLT agora (análise parcial, baseada só no sinal e histórico já monitorados). Tente de novo em 1 minuto.</span>`
       : '';
     box.innerHTML = `${d.causa}${cacheTag}${semDetalhe}<span class="causa-disclaimer">Sugestão gerada por IA a partir dos dados acima. Revise antes de repassar ao cliente.</span>`;

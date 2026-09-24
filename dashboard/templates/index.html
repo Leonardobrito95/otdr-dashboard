@@ -124,7 +124,7 @@
   .btn-export{padding:7px 14px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;cursor:pointer;border:1px solid var(--ok);color:var(--ok);background:transparent;transition:all 0.2s;align-self:flex-end;white-space:nowrap}
   .btn-export:hover{background:rgba(46,204,113,0.1)}
   .btn-export:disabled{opacity:0.3;pointer-events:none}
-  /* ── Painel "PON outage" — categorizado, adaptado do widget SmartOLT ── */
+  /* ── Painel "PON outage" — categorizado (nasceu adaptado do widget do SmartOLT) ── */
   .pon-outage-wrap{position:relative;z-index:5;padding:0 28px;margin:10px 0 4px}
   .pon-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
   .pon-card-head{display:flex;align-items:center;gap:9px;padding:11px 16px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.015)}
@@ -193,7 +193,7 @@
 
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner"></div>
-  <div class="loading-text">CONSULTANDO SMARTOLT...</div>
+  <div class="loading-text">CONSULTANDO OLT CLOUD...</div>
 </div>
 
 <header>
@@ -386,7 +386,7 @@ async function carregarDados(forcar=false){
   document.getElementById('loadingOverlay').classList.remove('hidden');
   document.getElementById('btnRefresh').classList.add('loading');
   try{
-    // forcar=true → live=1 força consulta real à SmartOLT (respeitando cooldown de 5 min no backend)
+    // forcar=true → live=1 força consulta real ao OLT Cloud (respeitando cooldown de 1 min no backend)
     const url = forcar ? '/api/onus?live=1' : '/api/onus';
     const data=await(await fetch(url)).json();
     if(data.status!=='ok') throw new Error(data.mensagem);
@@ -566,9 +566,9 @@ function exportarExcel(){
   const ws=XLSX.utils.json_to_sheet(linhas);
   ws['!cols']=[{wch:10},{wch:36},{wch:18},{wch:18},{wch:10},{wch:14},{wch:12},{wch:8},{wch:14},{wch:14},{wch:16},{wch:18}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Sinal SmartOLT');
+  XLSX.utils.book_append_sheet(wb,ws,'Sinal OLT Cloud');
   const hoje=new Date().toISOString().split('T')[0];
-  XLSX.writeFile(wb,`Sinal_SmartOLT_${hoje}.xlsx`);
+  XLSX.writeFile(wb,`Sinal_OLTCloud_${hoje}.xlsx`);
 }
 
 async function forceRefresh(){await carregarDados(true);}

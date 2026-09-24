@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
 """
-OTDR Preventivo CANAÃ — SmartOLT
-Snapshot diário: SmartOLT API → Postgres (sistema_db)
+OTDR Preventivo CANAÃ: snapshot diário de sinal
+OLT Cloud → Postgres (sistema_db), tabela otdr.historico_smartolt
 Caminho: /home/canaa/OTDR/otdr_smartolt.py
+
+O SmartOLT foi descontinuado em 2026-09 e a fonte passou a ser o OLT Cloud
+(oltcloud.py). O nome do arquivo e o da tabela ficaram, porque o cron do root
+chama este caminho e o Diagnóstico do Canaã Performance lê essa tabela. As
+colunas continuam com o mesmo significado e vocabulário de antes (ver a
+tradução em oltcloud.py).
+
+  --dry-run   monta o snapshot e mostra o resumo, sem gravar no Postgres
 """
 
 import sys
 import logging
-import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 from datetime import date, datetime
 from pathlib import Path
 import os
+
+from oltcloud import OltCloud, para_formato_smartolt
 
 # ── Paths ─────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
@@ -34,8 +43,6 @@ log = logging.getLogger(__name__)
 # ── Credenciais ───────────────────────────────────────────────
 load_dotenv(ENV_FILE)
 
-SMARTOLT_URL = os.getenv("SMARTOLT_URL")
-SMARTOLT_KEY = os.getenv("SMARTOLT_KEY")
 
 PG_CONFIG = {
     "host":     os.getenv("PG_HOST"),
@@ -71,23 +78,24 @@ def classificar_nivel(sinal_rx):
         return "3 - Fora de Operacao"
 
 def main():
+    dry_run = "--dry-run" in sys.argv
     hoje = date.today()
     agora = datetime.now()
     log.info("=" * 50)
-    log.info(f"Iniciando snapshot SmartOLT — {hoje}")
+    log.info(f"Iniciando snapshot de sinal (OLT Cloud) — {hoje}{' [dry-run]' if dry_run else ''}")
 
-    # 1. Busca todas as ONUs no SmartOLT
+    # 1. Busca todas as ONUs no OLT Cloud, já no formato que o snapshot sempre leu
+    cliente = OltCloud()
+    if not cliente.configurado():
+        log.error("OLTCLOUD_URL/OLTCLOUD_USER/OLTCLOUD_PASSWORD não configurados em .env")
+        sys.exit(1)
     try:
-        url = f"{SMARTOLT_URL}/api/onu/get_all_onus_details"
-        headers = {"X-Token": SMARTOLT_KEY}
-        log.info(f"Consultando SmartOLT: {url}")
-        response = requests.get(url, headers=headers, timeout=120)
-        response.raise_for_status()
-        data = response.json()
-        onus = data.get("onus", [])
-        log.info(f"SmartOLT: {len(onus)} ONUs recebidas")
+        log.info(f"Consultando OLT Cloud: {cliente.url}")
+        # ONU fora do ar entra com a última leitura válida (ver para_formato_smartolt)
+        onus = [para_formato_smartolt(e, manter_ultimo_sinal=True) for e in cliente.equipamentos()]
+        log.info(f"OLT Cloud: {len(onus)} ONUs recebidas")
     except Exception as e:
-        log.error(f"Erro ao consultar SmartOLT: {e}")
+        log.error(f"Erro ao consultar OLT Cloud: {e}")
         sys.exit(1)
 
     if not onus:
@@ -145,6 +153,12 @@ def main():
 
     log.info(f"ONUs degradadas (sinal < -24 dBm): {degradadas}")
 
+    if dry_run:
+        from collections import Counter
+        log.info(f"[dry-run] nível: {dict(Counter(d[15] for d in dados))} | status: {dict(Counter(d[13] for d in dados))}")
+        log.info("[dry-run] nada gravado no Postgres.")
+        return
+
     if not dados:
         log.warning("Nenhuma ONU degradada encontrada.")
         sys.exit(0)
@@ -163,7 +177,7 @@ def main():
         log.error(f"Erro ao inserir no Postgres: {e}")
         sys.exit(1)
 
-    log.info("Snapshot SmartOLT concluído com sucesso.")
+    log.info("Snapshot de sinal (OLT Cloud) concluído com sucesso.")
     log.info("=" * 50)
 
 if __name__ == "__main__":

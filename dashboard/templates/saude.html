@@ -464,7 +464,7 @@ function render(data){
             <option value="nome"    ${_sort==='nome'?'selected':''}>Nome (A-Z)</option>
           </select>
         </div>
-        <button class="btn-limpeza" onclick="exportarLimpeza(this)" title="Exporta todas as ONUs canceladas/órfãs para a equipe de cadastro limpar no SmartOLT">🧹 Exportar limpeza</button>
+        <button class="btn-limpeza" onclick="exportarLimpeza(this)" title="Exporta todas as ONUs canceladas/órfãs para a equipe de cadastro limpar no OLT Cloud">🧹 Exportar limpeza</button>
       </div>
     </div>`;
 
@@ -608,7 +608,7 @@ async function exportarLimpeza(btn){
     const ws = XLSX.utils.json_to_sheet(linhas);
     ws['!cols'] = [{wch:16},{wch:12},{wch:16},{wch:34},{wch:10},{wch:13},{wch:12}];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Limpeza SmartOLT');
+    XLSX.utils.book_append_sheet(wb, ws, 'Limpeza OLT Cloud');
     XLSX.writeFile(wb, `Limpeza_ONUs_${new Date().toISOString().split('T')[0]}.xlsx`);
   }catch(e){ alert('Erro ao gerar: '+e.message); }
   finally{ btn.disabled = false; btn.textContent = txt; }

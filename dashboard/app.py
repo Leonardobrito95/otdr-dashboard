@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 OTDR Dashboard Interno — CANAÃ Telecom v2
-Flask app — SmartOLT + MySQL IXC + PostgreSQL histórico
+Flask app — OLT Cloud + MySQL IXC + PostgreSQL histórico
 Porta: 5008
 """
 
@@ -13,6 +13,7 @@ import mysql.connector
 import psycopg2
 import psycopg2.extras
 import os
+import sys
 import time
 import threading
 from pathlib import Path
@@ -29,9 +30,13 @@ from google.genai import types
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-SMARTOLT_URL = os.getenv("SMARTOLT_URL")
-SMARTOLT_KEY = os.getenv("SMARTOLT_KEY")
-HEADERS      = {"X-Token": SMARTOLT_KEY}
+# Fonte de status e sinal das ONUs: OLT Cloud (o SmartOLT foi descontinuado em
+# 2026-09 e nada aqui o consulta mais). oltcloud.py fica na raiz do OTDR e
+# entrega os dados no mesmo formato que o dashboard lia do SmartOLT.
+sys.path.insert(0, str(BASE_DIR))
+from oltcloud import OltCloud, para_formato_smartolt, calcular_outages, detalhe_onu  # noqa: E402
+
+OLTCLOUD = OltCloud()
 
 MYSQL_CONFIG = {
     "host":     os.getenv("MYSQL_HOST"),
@@ -135,13 +140,9 @@ def _checar_autenticacao():
     return "Acesso restrito. Entre pelo Canaã Performance (hub.canaatelecom.com.br) e use o ícone do OTDR.", 401
 
 # ── Fuso horário ───────────────────────────────────────────────
-# O campo "latest_status_change" da API get_outage_pons já vem em horário
-# local de Brasília (achávamos que era UTC, mas em 08/07/2026 confirmamos ao
-# vivo que não é: o SmartOLT mostrava "X min atrás" batendo com o horário
-# local, e o alerta batia com o horário real do evento só depois de
-# subtrairmos 3h a mais por engano).
-# "last_status_change" da API get_all_onus_details também já é local — nunca
-# precisou de conversão.
+# Os horários de status vêm em horário local de Brasília: era assim no SmartOLT
+# (confirmado ao vivo em 08/07/2026) e é assim no OLT Cloud (conferido no
+# painel em 24/09/2026). Nunca precisou de conversão, só normaliza o formato.
 from datetime import timezone
 _TZ_BRASILIA = timezone(timedelta(hours=-3))
 
@@ -169,11 +170,19 @@ def classificar(rx):
     elif rx >= -28: return NIVEL_CRITICO
     else:           return NIVEL_FORA
 
-# ── Cache SmartOLT — thread-safe + persistência em disco ──────
+# ── Cache de ONUs (OLT Cloud) — thread-safe + persistência em disco ──
+# A rede inteira no OLT Cloud são 16 páginas (~55 s). Por isso a varredura
+# completa roda só a cada OTDR_CACHE_COMPLETO_SEG (padrão 30 min, pega ONU
+# nova ou removida) e, no meio, a atualização é incremental: só as ONUs cujo
+# status ou sinal mudou desde a última sincronização (1 a 2 páginas, < 1 s).
 CACHE_FILE       = BASE_DIR / "cache_onus.json"
-CACHE_TTL        = 86400  # 24h — cache renovado pelo cron ou refresh manual
-CACHE_TTL_MIN    = 300    # cooldown mínimo para ?live=1 (5 min)
+CACHE_TTL        = 86400  # 24h — cache renovado pelo refresh periódico ou manual
+CACHE_TTL_MIN    = 60     # cooldown mínimo para ?live=1 (1 min; a atualização é incremental)
+CACHE_COMPLETO_SEG = int(os.getenv("OTDR_CACHE_COMPLETO_SEG", "1800"))
+MARGEM_INCREMENTAL = timedelta(minutes=5)  # sobreposição entre sincronizações (relógio, atraso da API)
+FONTE_CACHE      = "oltcloud"
 _cache_lock      = threading.Lock()
+_sync_lock       = threading.Lock()   # uma sincronização por vez (thread de refresh x clique)
 
 def _load_cache_disco():
     """Carrega cache do disco ao iniciar — garante dados mesmo após restart."""
@@ -187,12 +196,16 @@ def _load_cache_disco():
                 import logging
                 logging.getLogger(__name__).info(
                     f"Cache carregado do disco: {len(onus)} ONUs "
-                    f"(salvo {int((time.time()-ts)//60)} min atrás)"
+                    f"(salvo {int((time.time()-ts)//60)} min atrás, fonte {salvo.get('fonte', 'smartolt')})"
                 )
-                return {"data": onus, "timestamp": ts}
+                # Cache antigo (do SmartOLT, sem "fonte") serve para a tela não abrir vazia,
+                # mas força uma varredura completa na primeira sincronização.
+                return {"data": onus, "timestamp": ts, "fonte": salvo.get("fonte"),
+                        "completo_em": salvo.get("completo_em", 0),
+                        "sincronizado_em": salvo.get("sincronizado_em")}
     except Exception as e:
         pass
-    return {"data": None, "timestamp": 0}
+    return {"data": None, "timestamp": 0, "fonte": None, "completo_em": 0, "sincronizado_em": None}
 
 _cache = _load_cache_disco()
 
@@ -202,8 +215,9 @@ _mac_cache_lock = threading.Lock()
 MAC_CACHE_TTL   = 3600  # 1 hora
 
 # ── Cache cliente_id→dados (IXC) — fallback de identificação ──
-# O SmartOLT grava "id<ID_cliente>" no campo name da ONU. Quando o cruzamento
-# por MAC falha, usamos esse ID para recuperar o cliente (inclusive cancelados).
+# O campo name da ONU vem como "id<ID_cliente>" quando o OLT Cloud tem o vínculo
+# com o IXC (oltcloud.py monta; no SmartOLT era preenchido à mão). Quando o
+# cruzamento por MAC falha, usamos esse ID para recuperar o cliente (inclusive cancelados).
 _cli_cache      = {"data": None, "timestamp": 0}
 _cli_cache_lock = threading.Lock()
 
@@ -247,7 +261,7 @@ def identificar_cliente(onu, mac_map, cliente_map):
     return None
 
 def montar_sn_name_map():
-    """SN → campo 'name' do SmartOLT (cache atual), usado como fallback id<N>
+    """SN → campo 'name' da ONU (cache atual), usado como fallback id<N>
     para identificar cliente em registros históricos (que não guardam 'name')."""
     onus_cache, _, _ = get_onus(force=False)
     return {(o.get("sn") or "").upper(): o.get("name") for o in onus_cache}
@@ -302,6 +316,42 @@ def get_mac_map():
             try: conn.close()
             except: pass
 
+def _salvar_cache_disco():
+    with _cache_lock:
+        salvo = {k: _cache.get(k) for k in ("data", "timestamp", "fonte", "completo_em", "sincronizado_em")}
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(salvo, f)
+    except Exception as e:
+        app.logger.warning(f"Falha ao salvar cache em disco: {e}")
+
+def _sincronizar_onus():
+    """Atualiza o cache a partir do OLT Cloud: completa quando o cache não é do
+    OLT Cloud ou a última completa passou de CACHE_COMPLETO_SEG; incremental no
+    resto do tempo. Devolve a lista nova (formato SmartOLT)."""
+    inicio = datetime.now()
+    with _cache_lock:
+        atual       = _cache.get("data") or []
+        completo_em = _cache.get("completo_em") or 0
+        desde_txt   = _cache.get("sincronizado_em")
+        fonte       = _cache.get("fonte")
+    completa = (fonte != FONTE_CACHE or not atual or not desde_txt
+                or time.time() - completo_em > CACHE_COMPLETO_SEG)
+    if completa:
+        onus = [para_formato_smartolt(e) for e in OLTCLOUD.equipamentos()]
+        completo_em = time.time()
+    else:
+        desde = datetime.strptime(desde_txt, "%Y-%m-%d %H:%M:%S") - MARGEM_INCREMENTAL
+        por_id = {o.get("oltcloud_id"): o for o in atual}
+        for e in OLTCLOUD.equipamentos_alterados_desde(desde):
+            por_id[e.get("id")] = para_formato_smartolt(e)
+        onus = list(por_id.values())
+    with _cache_lock:
+        _cache.update({"data": onus, "timestamp": time.time(), "fonte": FONTE_CACHE,
+                       "completo_em": completo_em, "sincronizado_em": inicio.strftime("%Y-%m-%d %H:%M:%S")})
+    _salvar_cache_disco()
+    return onus
+
 def get_onus(force=False):
     agora = time.time()
     with _cache_lock:
@@ -314,34 +364,27 @@ def get_onus(force=False):
             return _cache["data"], False, False
 
     # force=True mas cache ainda fresco (< cooldown) → não bate na API.
-    # Protege o rate limit do SmartOLT contra cliques repetidos no botão Atualizar.
     if tem_cache and force and idade < CACHE_TTL_MIN:
         with _cache_lock:
             return _cache["data"], False, False
 
-    # force=True (fora do cooldown) ou sem cache → chama a API
-    try:
-        url = f"{SMARTOLT_URL}/api/onu/get_all_onus_details"
-        resp = requests.get(url, headers=HEADERS, timeout=120)
-        resp.raise_for_status()
-        onus = resp.json().get("onus", [])
+    # Já tem uma sincronização rodando (ex: a completa de 30 em 30 min):
+    # devolve o cache em vez de esperar ou pedir tudo de novo.
+    if not _sync_lock.acquire(blocking=not tem_cache):
         with _cache_lock:
-            _cache["data"]      = onus
-            _cache["timestamp"] = agora
-        try:
-            with open(CACHE_FILE, "w") as f:
-                json.dump({"data": onus, "timestamp": agora}, f)
-        except Exception as e:
-            app.logger.warning(f"Falha ao salvar cache em disco: {e}")
-        return onus, True, False
+            return _cache["data"], False, False
+    try:
+        return _sincronizar_onus(), True, False
     except Exception as e:
-        # Rate limit ou erro — retorna cache se disponível
+        # OLT Cloud fora ou erro — retorna cache se disponível
         with _cache_lock:
             dados = _cache.get("data")
         if dados:
-            app.logger.warning(f"SmartOLT indisponível ({e}) — usando cache ({len(dados)} ONUs)")
+            app.logger.warning(f"OLT Cloud indisponível ({e}) — usando cache ({len(dados)} ONUs)")
             return dados, False, True   # rate_limited=True
         raise
+    finally:
+        _sync_lock.release()
 
 # ── IDs assuntos técnicos ─────────────────────────────────────
 ASSUNTOS_IDS = (
@@ -377,7 +420,7 @@ def alertas_page(): return redirect("/painel")
 @app.route("/saude")
 def saude_page(): return redirect("/painel")
 
-# ── API SmartOLT ──────────────────────────────────────────────
+# ── API de ONUs (cache do OLT Cloud) ──────────────────────────
 @app.route("/api/onus")
 def api_onus():
     try:
@@ -1092,11 +1135,11 @@ def mapa_page(): return render_template("mapa.html")
 def api_mapa():
     """
     Retorna pontos georreferenciados (clientes fibra com lat/lon no IXC)
-    cruzados com nível de sinal atual (cache SmartOLT).
+    cruzados com nível de sinal atual (cache do OLT Cloud).
     Também retorna POPs/OLTs para marcadores de referência.
     """
     try:
-        # 1. Pegar ONUs do cache SmartOLT
+        # 1. Pegar ONUs do cache do OLT Cloud
         force = request.args.get('refresh') == '1'
         onus, _, _rl = get_onus(force=force)
         mac_map  = get_mac_map()
@@ -1209,16 +1252,17 @@ def api_mapa():
         msg = str(e)
         app.logger.error(f"api_mapa erro: {e}")
         if "403" in msg or "rate" in msg.lower() or "Forbidden" in msg:
-            return jsonify({"status": "rate_limit", "mensagem": "SmartOLT rate limit excedido. Aguarde e tente novamente."}), 503
+            return jsonify({"status": "rate_limit", "mensagem": "OLT Cloud indisponível no momento. Aguarde e tente novamente."}), 503
         return jsonify({"status": "erro", "mensagem": msg}), 500
 
 # ── Alertas: status de outage em tempo real ───────────────────
 _alertas_cache: dict = {"data": None, "ts": 0}
 _ALERTAS_TTL = 120  # 2 min
 
-# Categoria = seção do get_outage_pons onde a porta apareceu. É isso que
-# distingue LOS parcial de LOS total, power fail e offline — não existe campo
-# "outage_cause"/"cause" na resposta real da API (mito de versões antigas).
+# Categoria = partial_los | los | power | offline, a mesma classificação que o
+# get_outage_pons do SmartOLT fazia. O OLT Cloud não tem rota equivalente:
+# oltcloud.calcular_outages() refaz a partir do status de cada ONU do cache
+# (calibrado contra o SmartOLT, ver oltcloud.py).
 CAUSAS_MAP = {
     "partial_los": "LOS parcial",
     "los":         "LOS total (fibra cortada)",
@@ -1236,13 +1280,10 @@ def _buscar_outages():
         d["cached"] = True
         return d
 
-    # Consulta única e global — a resposta real é
-    # {"response": {"sections": [{"key": "partial_los"|"los"|"power"|"offline",
-    # "groups": [{"pons": [{board, port, olt_id, olt_name, los_count, ...}]}]}]}}
-    r = requests.get(f"{SMARTOLT_URL}/api/system/get_outage_pons/", headers=HEADERS, timeout=15)
-    r.raise_for_status()
-    d = r.json()
-    sections = (d.get("response") or {}).get("sections", [])
+    # Calculado do cache de ONUs (rede inteira, renovado a cada minuto), sem
+    # nenhuma chamada extra à API.
+    onus, _, _ = get_onus(force=False)
+    portas = calcular_outages(onus or [])
 
     # Categorias fixas (sempre presentes no resumo, mesmo com 0 ocorrências,
     # para o frontend poder mostrar o "✓ ok" quando não há problema)
@@ -1250,36 +1291,25 @@ def _buscar_outages():
     resumo = {c: {"pons": 0, "onus": 0} for c in CATEGORIAS_ORDEM}
 
     outages = []
-    for sec in sections:
-        categoria = sec.get("key", "")
+    for p in portas:
+        categoria = p.get("categoria", "")
         if categoria in resumo:
-            resumo[categoria] = {"pons": sec.get("pon_count", 0), "onus": sec.get("subscribers", 0)}
-        for grupo in sec.get("groups", []):
-            for p in grupo.get("pons", []):
-                total_onus = p.get("total_onus")
-                afetados = p.get("affected_onus")
-                afetados_pct = p.get("affected_percent")
-                # Outage TOTAL (los/power/offline): a própria porta inteira caiu,
-                # então mesmo sem o campo vir preenchido pelo SmartOLT, o
-                # afetado real é a porta inteira (100%). Só "partial_los" tem
-                # um valor parcial de verdade vindo da API.
-                if afetados is None and categoria != "partial_los":
-                    afetados = total_onus
-                    afetados_pct = 100
-                outages.append({
-                    "olt_id":       p.get("olt_id"),
-                    "olt_nome":     p.get("olt_name"),
-                    "board":        p.get("board"),
-                    "port":         p.get("port"),
-                    "onus":         total_onus,
-                    "afetados":     afetados,
-                    "afetados_pct": afetados_pct,
-                    "los":          p.get("los_count", 0),
-                    "pwrfail":      p.get("power_count", 0),
-                    "categoria":    categoria,
-                    "causa":        CAUSAS_MAP.get(categoria, "Desconhecida"),
-                    "desde":        _utc_para_brasilia(p.get("latest_status_change", "")),
-                })
+            resumo[categoria]["pons"] += 1
+            resumo[categoria]["onus"] += p.get("affected_onus") or 0
+        outages.append({
+            "olt_id":       p.get("olt_id"),
+            "olt_nome":     p.get("olt_name"),
+            "board":        p.get("board"),
+            "port":         p.get("port"),
+            "onus":         p.get("total_onus"),
+            "afetados":     p.get("affected_onus"),
+            "afetados_pct": p.get("affected_percent"),
+            "los":          p.get("los_count", 0),
+            "pwrfail":      p.get("power_count", 0),
+            "categoria":    categoria,
+            "causa":        CAUSAS_MAP.get(categoria, "Desconhecida"),
+            "desde":        _utc_para_brasilia(p.get("latest_status_change", "")),
+        })
 
     resultado = {
         "status":  "ok",
@@ -1303,7 +1333,7 @@ def api_alertas_status():
 def api_pon_outage_onus():
     """Drill-down do widget PON outage: quais ONUs específicas estão afetadas
     numa porta (olt_id + board + port), cruzadas com o cliente (IXC).
-    Não bate na API do SmartOLT — usa o cache ao vivo já mantido pelo sistema."""
+    Não consulta a API do OLT Cloud — usa o cache ao vivo já mantido pelo sistema."""
     try:
         olt_id = request.args.get("olt_id", "").strip()
         board  = request.args.get("board", "").strip()
@@ -1474,7 +1504,7 @@ def api_synkr_atualizar():
 def api_synkr_encerrar():
     """Encerra manualmente um aviso aberto — rede de segurança para quando a
     detecção automática de recuperação (otdr_alertas.py) não pegar o caso
-    (ex: SmartOLT fora do ar, OLT renomeada/removida)."""
+    (ex: OLT Cloud fora do ar, OLT renomeada/removida)."""
     try:
         dados = request.get_json(force=True) or {}
         chave = (dados.get("chave") or "").strip()
@@ -1602,7 +1632,7 @@ def _causa_provavel_contexto(chave: str):
 
     return "\n".join([
         f"OLT: {outage['olt_nome']} (board {board}, porta {port})",
-        f"Categoria detectada pelo SmartOLT: {outage['causa']}",
+        f"Categoria da queda (classificada pelo status das ONUs): {outage['causa']}",
         f"Total de ONUs na porta: {outage['onus']}",
         f"ONUs afetadas: {outage['afetados']} ({outage['afetados_pct']}%)",
         f"Contagem de ONUs por status atual: {status_count}",
@@ -1773,7 +1803,7 @@ def api_saude_olt_offline():
 @app.route("/api/saude_olt/limpeza")
 def api_saude_limpeza():
     """Lista de ONUs canceladas/órfãs (lixo de cadastro) de todas as OLTs —
-    para a equipe de cadastro remover do SmartOLT e liberar slots de porta."""
+    para a equipe de cadastro remover do OLT Cloud e liberar slots de porta."""
     try:
         onus, _, _ = get_onus(force=False)
         mac_map = get_mac_map()
@@ -1847,7 +1877,7 @@ def consulta_page(): return render_template("consulta.html")
 def api_consulta_cliente():
     """Consulta de cliente: roda as 4 checagens que o gestor faria manualmente
     (sinal ao vivo, histórico recorrente, porta compartilhada, saúde da OLT) e
-    devolve um veredito direto. Não bate na API do SmartOLT — usa cache + PG.
+    devolve um veredito direto. Não consulta a API do OLT Cloud — usa cache + PG.
     Aceita nome, CPF/CNPJ, ou SN direto (para ONU sem vínculo com o cadastro
     IXC, quando o processo de instalação falhou em vincular o cliente)."""
     try:
@@ -1863,7 +1893,7 @@ def api_consulta_cliente():
         # ── 1. Encontra ONUs cujo cliente bate com o termo buscado ──────────
         # Detecta o tipo de busca pelo formato do termo: CPF/CNPJ (só dígitos,
         # 11 ou 14 chars), SN/MAC (sem espaço, alfanumérico com dígito, direto
-        # no cache do SmartOLT — cobre ONU sem vínculo no IXC) ou nome (padrão).
+        # no cache do OLT Cloud — cobre ONU sem vínculo no IXC) ou nome (padrão).
         modo = "nome"
         encontrados = []  # lista de (onu, cli_ou_None)
 
@@ -2024,7 +2054,7 @@ def api_consulta_cliente():
             if cli:
                 cliente_nome, cliente_id, cliente_ativo = cli["nome"], cli.get("id"), cli["ativo"]
             else:
-                cliente_nome = f"Sem vínculo IXC (nome no SmartOLT: {o.get('name') or 'não informado'})"
+                cliente_nome = f"Sem vínculo IXC (nome no OLT Cloud: {o.get('name') or 'não informado'})"
                 cliente_id, cliente_ativo = None, None
 
             resultados.append({
@@ -2047,7 +2077,7 @@ def api_consulta_cliente():
 # ── IA (Gemini) — causa provável na Consulta de Cliente ────────
 # Reaproveita os dados que a própria /api/consulta_cliente já calculou (o
 # frontend manda de volta o resultado que está na tela) — não bate de novo
-# no IXC/PG/SmartOLT, só formata e manda pro modelo. Isso deixa a consulta
+# no IXC/PG/OLT Cloud, só formata e manda pro modelo. Isso deixa a consulta
 # precisa (mesmos dados que o humano está vendo) e barata em tokens.
 #
 # "Trava para dedo nervoso": cache de 10min por SN (clique repetido no mesmo
@@ -2082,21 +2112,16 @@ Regras:
 def _fmt_dado(v):
     return "não disponível" if v in (None, "") else v
 
-def _smartolt_onu_detalhe(sn: str):
-    """Status completo de uma ONU direto na OLT (comando ao vivo, ~5s,
-    "resource-intensive" segundo a doc do SmartOLT — só pode ser chamado sob
-    demanda pra debug pontual, NUNCA em bulk/polling). Aqui está restrito ao
-    clique em 'Analisar causa provável', que já tem cache de 10min e trava de
-    concorrência, então nunca dispara repetido para a mesma ONU.
-    Traz atenuação óptica e o histórico real de causas reportado pela OLT
-    (Power Fail, Optical Interference etc) — muito mais preciso que inferir
-    causa só pelo nosso histórico de sinal."""
+def _detalhe_onu(sn: str):
+    """Estado da ONU e histórico de mudanças de status no OLT Cloud (3
+    requisições leves). Restrito ao clique em 'Analisar causa provável', que
+    já tem cache de 10min e trava de concorrência. O histórico de status
+    (quando caiu sem energia, quando perdeu sinal, quando voltou) é muito mais
+    preciso que inferir causa só pelo nosso histórico de sinal."""
     try:
-        r = requests.get(f"{SMARTOLT_URL}/api/onu/get_onu_full_status_info/{sn}", headers=HEADERS, timeout=15)
-        r.raise_for_status()
-        return r.json().get("full_status_json")
+        return detalhe_onu(OLTCLOUD, sn)
     except Exception as e:
-        app.logger.warning(f"[IA] Falha ao buscar status completo da ONU {sn} no SmartOLT: {e}")
+        app.logger.warning(f"[IA] Falha ao buscar o detalhe da ONU {sn} no OLT Cloud: {e}")
         return None
 
 def _montar_contexto_cliente(d: dict, detalhe: dict | None = None) -> str:
@@ -2130,35 +2155,24 @@ def _montar_contexto_cliente(d: dict, detalhe: dict | None = None) -> str:
     linhas.append(f"Saúde da OLT ({d.get('olt_name', '?')}): {olt.get('pct_offline', 0)}% offline, nível {olt.get('nivel', '?')}")
 
     if detalhe:
-        onu_det = detalhe.get("ONU details") or {}
-        if onu_det.get("ONU Distance"):
-            linhas.append(f"Distância óptica até a OLT: {onu_det['ONU Distance']}")
-
-        optico = detalhe.get("Optical status") or {}
-        if optico.get("1310nm Attenuation") or optico.get("1490nm Attenuation"):
+        if detalhe.get("distancia_m"):
+            linhas.append(f"Distância óptica até a OLT: {detalhe['distancia_m']} m")
+        if detalhe.get("rx_onu") is not None or detalhe.get("rx_olt") is not None:
             linhas.append(
-                f"Atenuação óptica medida pela OLT agora: 1310nm (upstream) "
-                f"{optico.get('1310nm Attenuation', 'não disponível')}, 1490nm (downstream) "
-                f"{optico.get('1490nm Attenuation', 'não disponível')}"
+                f"Sinal óptico lido agora: RX na ONU {_fmt_dado(detalhe.get('rx_onu'))} dBm (downstream), "
+                f"RX na OLT {_fmt_dado(detalhe.get('rx_olt'))} dBm (upstream)"
             )
-
-        historico_olt = detalhe.get("History") or {}
-        if historico_olt:
-            try:
-                chaves_ordenadas = sorted(historico_olt.keys(), key=lambda k: int(k))
-            except ValueError:
-                chaves_ordenadas = list(historico_olt.keys())
-            eventos = []
-            for chave in chaves_ordenadas[-5:]:
-                ev = historico_olt[chave]
-                causa = ev.get("Cause", "?")
-                if ev.get("Offline at"):
-                    eventos.append(f"{causa} (autenticou {ev.get('Auth at', '?')}, caiu {ev.get('Offline at', '?')})")
-                else:
-                    eventos.append(f"{causa} (desde {ev.get('Auth at', '?')})")
+        if detalhe.get("temperatura") is not None:
+            linhas.append(f"Temperatura do módulo óptico da ONU: {detalhe['temperatura']} °C")
+        if detalhe.get("intermitencia"):
+            linhas.append("A OLT marcou intermitência no módulo óptico desta ONU.")
+        if detalhe.get("ultimo_alarme"):
+            linhas.append(f"Último alarme registrado pela OLT para esta ONU: {detalhe['ultimo_alarme']}")
+        eventos = detalhe.get("eventos") or []
+        if eventos:
             linhas.append(
-                "Histórico de causas de queda reportado pela própria OLT, eventos mais recentes: "
-                + "; ".join(eventos)
+                "Histórico de mudanças de status reportado pela OLT, do mais recente para o mais antigo: "
+                + "; ".join(f"{ev.get('status')} em {ev.get('data')}" for ev in eventos[:10])
             )
 
     return "\n".join(linhas)
@@ -2176,7 +2190,7 @@ def api_consulta_causa_provavel():
         cache = _CONSULTA_CAUSA_CACHE.get(sn)
         if cache and (agora - cache["ts"]) < cache["ttl"]:
             return jsonify({"status": "ok", "causa": cache["causa"], "cache": True,
-                             "detalhe_smartolt": cache["detalhe_smartolt"]})
+                             "detalhe_olt": cache["detalhe_olt"]})
 
         if sn in _CONSULTA_CAUSA_EM_ANDAMENTO:
             return jsonify({"status": "erro",
@@ -2187,7 +2201,7 @@ def api_consulta_causa_provavel():
         if not cliente:
             return jsonify({"status": "erro", "mensagem": "IA não configurada (GEMINI_API_KEY ausente)."}), 503
 
-        detalhe = _smartolt_onu_detalhe(sn)
+        detalhe = _detalhe_onu(sn)
         contexto = _montar_contexto_cliente(dados, detalhe)
         resposta = cliente.models.generate_content(
             model=GEMINI_MODEL,
@@ -2203,13 +2217,13 @@ def api_consulta_causa_provavel():
         if not texto:
             return jsonify({"status": "erro", "mensagem": "IA não retornou resposta."}), 502
 
-        # Sem o detalhe ao vivo da OLT (endpoint "resource-intensive", pode falhar
-        # ou ser limitado pelo SmartOLT), a análise fica incompleta — guarda por
-        # menos tempo, pra não travar uma resposta pior por 10min à toa.
+        # Sem o detalhe da ONU (OLT Cloud fora ou serial não encontrado), a
+        # análise fica incompleta — guarda por menos tempo, pra não travar uma
+        # resposta pior por 10min à toa.
         detalhe_ok = detalhe is not None
         ttl = _CONSULTA_CAUSA_TTL if detalhe_ok else _CONSULTA_CAUSA_TTL_CURTO
-        _CONSULTA_CAUSA_CACHE[sn] = {"causa": texto, "ts": agora, "ttl": ttl, "detalhe_smartolt": detalhe_ok}
-        return jsonify({"status": "ok", "causa": texto, "cache": False, "detalhe_smartolt": detalhe_ok})
+        _CONSULTA_CAUSA_CACHE[sn] = {"causa": texto, "ts": agora, "ttl": ttl, "detalhe_olt": detalhe_ok}
+        return jsonify({"status": "ok", "causa": texto, "cache": False, "detalhe_olt": detalhe_ok})
     except Exception as e:
         app.logger.error(f"[IA] Falha ao gerar causa provável (cliente): {e}")
         return jsonify({"status": "erro", "mensagem": "Falha ao consultar IA. Tente novamente."}), 500
@@ -2323,16 +2337,17 @@ def api_painel():
 
 # ── Refresh periódico do cache de conectividade ───────────────
 # Mantém os indicadores (Total/Online/Não Online) atualizados sem depender
-# do botão. Custo: 1 chamada get_all_onus_details por ciclo (traz todas as
-# ONUs de uma vez). A cada 60s = 60 chamadas/hora, ainda com folga ampla no
-# rate limit do SmartOLT (1.000/hora) — reduzido de 2h para refletir o
-# status quase em tempo real ao investigar um caso (CONSULTA/SAÚDE).
+# do botão, quase em tempo real ao investigar um caso (CONSULTA/SAÚDE).
+# Custo no OLT Cloud: 1 a 2 páginas por minuto (só o que mudou) e a rede
+# inteira (16 páginas) a cada OTDR_CACHE_COMPLETO_SEG (ver _sincronizar_onus).
 CACHE_REFRESH_INTERVAL = int(os.getenv("OTDR_CACHE_REFRESH", "60"))  # 1 min
 
 def _refresh_periodico():
     time.sleep(30)  # deixa o app subir antes do primeiro refresh
     while True:
         try:
+            with _cache_lock:
+                _cache["timestamp"] = 0   # a thread ignora o cooldown do botão
             _, atualizado, _rl = get_onus(force=True)
             if atualizado:
                 app.logger.info("Cache de conectividade renovado automaticamente.")
