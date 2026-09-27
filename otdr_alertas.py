@@ -1073,6 +1073,32 @@ def verificar() -> None:
                 except Exception as e:
                     log.error(f"Falha ao enviar normalização de porta ({olt_nome} {chave}): {e}")
 
+        # Porta ainda tem ONU fora, mas o que resta não justificaria um alerta
+        # NOVO (ex: 1-2 clientes em power fail, bem abaixo do limiar de 100):
+        # o evento que gerou o aviso (ex: LOS total, fibra cortada) já foi
+        # resolvido de verdade, só sobrou um caso individual sem relação com
+        # ele. Sem isso, o aviso do SYNKR fica pendurado pra sempre, porque a
+        # porta nunca chega a ficar 100% livre de ONU fora do ar (achado real
+        # 2026-09-26: avisos #33765/#33891 -- o LOS total de cada um já estava
+        # encerrado há dias, travados só por 1-2 clientes com o próprio
+        # equipamento desligado, sem relação com o incidente original).
+        # Verifica contra _synkr_avisos (fonte da verdade de aviso aberto),
+        # não contra chaves_ant, porque um aviso pode ter ficado aberto por
+        # vários ciclos antes do estado cair abaixo do limiar.
+        for chave, porta in chaves_atuais.items():
+            chave_aviso = f"{olt_id}:{chave}"
+            if chave_aviso not in _synkr_avisos or _deve_alertar(porta):
+                continue
+            try:
+                _synkr_fechar_aviso(chave_aviso,
+                    report=f"Porta {chave} da OLT {olt_nome} caiu abaixo do limiar de alerta "
+                           f"({_qtd_afetados(porta)} ONU(s) restante(s), categoria {porta.get('categoria')}); "
+                           f"evento original considerado resolvido.")
+                log.info(f"[SYNKR] Aviso de {olt_nome} {chave} encerrado por queda abaixo do limiar "
+                         f"({_qtd_afetados(porta)} ONU(s) restante(s)).")
+            except Exception as e:
+                log.error(f"[SYNKR] Falha ao encerrar aviso rebaixado ({olt_nome} {chave}): {e}")
+
         if novas_portas:
             # No aquecimento, só avalia pra alerta as portas que comprovadamente
             # começaram DEPOIS do processo subir — o resto é baseline pré-existente.
